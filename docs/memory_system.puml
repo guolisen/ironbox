@@ -1,0 +1,102 @@
+@startuml Memory System
+
+' Define the components
+actor "User" as User
+component "Memory Agent" as MemoryAgent
+component "Memory System" as MemorySystem {
+  component "Memory Manager" as MemoryManager
+  component "Memory Retriever" as MemoryRetriever
+  component "Memory Indexer" as MemoryIndexer
+  component "Vector Store" as VectorStore
+}
+database "Database" as DB {
+  component "Memory Table" as MemoryTable
+  component "Vector Embeddings" as VectorEmbeddings
+  component "Chat History" as ChatHistory
+}
+component "LLM Service" as LLM
+
+' Define relationships
+User -down-> MemoryAgent : Query
+MemoryAgent -down-> MemorySystem : Use
+MemoryManager -down-> MemoryRetriever : Retrieve
+MemoryManager -down-> MemoryIndexer : Store
+MemoryRetriever -down-> VectorStore : Search
+MemoryIndexer -down-> VectorStore : Index
+VectorStore -down-> DB : Store/Retrieve
+MemoryManager -right-> LLM : Generate Embeddings
+
+' Add notes
+note right of MemoryAgent
+  Specialized agent for memory operations:
+  - Storing new memories
+  - Retrieving relevant memories
+  - Summarizing memories
+end note
+
+note right of MemoryManager
+  Central component that coordinates
+  memory operations and provides a
+  unified interface for other components
+end note
+
+note right of MemoryRetriever
+  Retrieves relevant memories based on
+  semantic similarity using vector search
+end note
+
+note right of MemoryIndexer
+  Processes and indexes new memories
+  by generating embeddings and storing
+  them in the vector store
+end note
+
+note right of VectorStore
+  Manages vector embeddings for efficient
+  semantic search of memories
+end note
+
+note right of DB
+  Persistent storage for:
+  - Raw memory content
+  - Vector embeddings
+  - Chat history
+end note
+
+' Add sequence diagram for memory operations
+newpage Memory Operation Flow
+
+actor "User" as User
+participant "Memory Agent" as Agent
+participant "Memory Manager" as Manager
+participant "Memory Indexer" as Indexer
+participant "Memory Retriever" as Retriever
+participant "LLM Service" as LLM
+database "Database" as DB
+
+' Store memory flow
+User -> Agent : "Remember that my Kubernetes cluster is named 'production'"
+Agent -> Manager : store_memory(content, user_id)
+Manager -> LLM : generate_embedding(content)
+LLM --> Manager : embedding vector
+Manager -> Indexer : index_memory(content, embedding, user_id)
+Indexer -> DB : store memory and embedding
+Indexer --> Manager : success
+Manager --> Agent : memory stored
+Agent --> User : "I'll remember that"
+
+' Retrieve memory flow
+User -> Agent : "What was my cluster name?"
+Agent -> Manager : retrieve_memories(query, user_id)
+Manager -> LLM : generate_embedding(query)
+LLM --> Manager : query embedding vector
+Manager -> Retriever : find_relevant_memories(query_embedding, user_id)
+Retriever -> DB : semantic search
+DB --> Retriever : relevant memories
+Retriever --> Manager : memories
+Manager --> Agent : relevant memories
+Agent -> LLM : generate response with memories
+LLM --> Agent : response
+Agent --> User : "Your Kubernetes cluster is named 'production'"
+
+@enduml

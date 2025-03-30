@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ironbox.core.graph import create_agent_graph, AgentType
+from ironbox.core.graph import AgentType
 from ironbox.core.memory import MemoryManager
+from ironbox.core.agent_core import default_agent_core, initialize_default_agent_core
 from ironbox.db.operations import get_db_session, ClusterOperations
 from ironbox.agents.cluster_register import ClusterRegisterAgent
 from ironbox.agents.cluster_info import ClusterInfoAgent
@@ -22,8 +23,19 @@ from ironbox.agents.llm_agent import LLMAgent
 from ironbox.mcp.client import default_mcp_client
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+# Set log levels for specific modules
+logging.getLogger("uvicorn").setLevel(logging.DEBUG)
+logging.getLogger("fastapi").setLevel(logging.DEBUG)
+logging.getLogger("sqlalchemy").setLevel(logging.INFO)  # Keep SQLAlchemy at INFO to avoid excessive SQL logs
+logging.getLogger("ironbox").setLevel(logging.DEBUG)
+
 logger = logging.getLogger(__name__)
+logger.debug("Routes module initialized with DEBUG logging")
 
 # Create router
 router = APIRouter()
@@ -79,6 +91,72 @@ class HealthCheckResponse(BaseModel):
     storage_status: Dict[str, Any] = Field(..., description="Storage status")
 
 
+# Initialize agent core
+async def initialize_agent_core():
+    """Initialize agent core with agents and tools."""
+    # Register agents
+    default_agent_core.register_agent(AgentType.CLUSTER_REGISTER, create_cluster_register_agent)
+    default_agent_core.register_agent(AgentType.CLUSTER_INFO, create_cluster_info_agent)
+    default_agent_core.register_agent(AgentType.CLUSTER_HEALTH, create_cluster_health_agent)
+    default_agent_core.register_agent(AgentType.MEMORY, create_memory_agent)
+    default_agent_core.register_agent(AgentType.MCP, create_mcp_agent)
+    default_agent_core.register_agent(AgentType.LLM, create_llm_agent)
+    
+    # Register local tools for React and Plan frameworks
+    default_agent_core.register_local_tools = register_local_tools
+    
+    # Initialize all tools (local and MCP) and set up frameworks
+    await initialize_default_agent_core()
+    
+    logger.debug("Initialized agent core with frameworks: %s", list(default_agent_core.frameworks.keys()))
+
+# Register local tools
+def register_local_tools(self):
+    """Register local tools with the agent core."""
+    # Kubernetes tools
+    self.register_tool("get_pod_count", get_pod_count)
+    self.register_tool("get_node_status", get_node_status)
+    self.register_tool("restart_pod", restart_pod)
+    self.register_tool("scale_deployment", scale_deployment)
+    
+    logger.debug("Registered local Kubernetes tools")
+
+# Sample local tools implementation
+async def get_pod_count(cluster_name: str) -> str:
+    """Get the number of pods in a cluster."""
+    # This is a mock implementation
+    pod_counts = {
+        "production": 42,
+        "staging": 18,
+        "development": 7,
+    }
+    return f"Cluster {cluster_name} has {pod_counts.get(cluster_name, 0)} pods."
+
+async def get_node_status(cluster_name: str) -> str:
+    """Get the status of nodes in a cluster."""
+    # This is a mock implementation
+    import json
+    node_statuses = {
+        "production": {"node1": "Ready", "node2": "Ready", "node3": "Ready"},
+        "staging": {"node1": "Ready", "node2": "NotReady"},
+        "development": {"node1": "Ready"},
+    }
+    status = node_statuses.get(cluster_name, {})
+    return f"Cluster {cluster_name} node statuses: {json.dumps(status, indent=2)}"
+
+async def restart_pod(cluster_name: str, pod_name: str) -> str:
+    """Restart a pod in a cluster."""
+    # This is a mock implementation
+    return f"Pod {pod_name} in cluster {cluster_name} has been restarted."
+
+async def scale_deployment(cluster_name: str, deployment_name: str, replicas: int) -> str:
+    """Scale a deployment in a cluster."""
+    # This is a mock implementation
+    return f"Deployment {deployment_name} in cluster {cluster_name} has been scaled to {replicas} replicas."
+
+# Initialize agent core on startup
+# This will be called from the API server's lifespan context manager
+
 # Chat endpoints
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
@@ -96,6 +174,7 @@ async def chat(
         Chat response
     """
     try:
+        logger.debug("!! Chat !!")
         # Get or create session ID
         session_id = request.session_id or str(uuid.uuid4())
         
@@ -105,25 +184,27 @@ async def chat(
             db_session=db
         )
         
-        # Create agents
-        agents = {
-            AgentType.ROUTER: create_router_agent(),
-            AgentType.CLUSTER_REGISTER: create_cluster_register_agent(db),
-            AgentType.CLUSTER_INFO: create_cluster_info_agent(db),
-            AgentType.CLUSTER_HEALTH: create_cluster_health_agent(db),
-            AgentType.MEMORY: create_memory_agent(db),
-            AgentType.MCP: create_mcp_agent(),
-            AgentType.LLM: create_llm_agent(),
-        }
+        # Get chat history
+        chat_history = await memory_manager.conversation_memory.load_memory_variables({})
+        messages = chat_history.get("history", [])
         
-        # Create agent graph
-        logger.debug("Creating agent graph with agents: %s", list(agents.keys()))
-        agent_graph = create_agent_graph(agents)
+        # Convert LangChain message objects to dictionaries
+        dict_messages = []
+        for message in messages:
+            if hasattr(message, 'content') and hasattr(message, 'type'):
+                dict_messages.append({
+                    "role": "user" if message.type == "human" else "assistant" if message.type == "ai" else "system",
+                    "content": message.content
+                })
         
-        # Invoke agent graph
-        logger.debug("Invoking agent graph with message: %s", request.message)
-        result = await agent_graph.invoke(request.message, session_id=session_id)
-        logger.debug("Agent graph result: %s", result)
+        # Process query with agent core
+        logger.debug("Processing query with agent core: %s", request.message)
+        result = await default_agent_core.process_query(
+            query=request.message,
+            session_id=session_id,
+            chat_history=dict_messages
+        )
+        logger.debug("Agent core result: %s", result)
         
         # Save conversation to memory
         await memory_manager.conversation_memory.save_context(
@@ -344,38 +425,38 @@ async def check_cluster_health(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Helper functions
-def create_router_agent():
+# Helper functions that create agents with database session
+def create_router_agent(db_session=None):
     """Create router agent."""
     from ironbox.core.graph import RouterAgent
     return RouterAgent()
 
 
-def create_cluster_register_agent(db: AsyncSession):
+def create_cluster_register_agent(db_session=None):
     """Create cluster register agent."""
-    return ClusterRegisterAgent(db_session=db)
+    return ClusterRegisterAgent(db_session=db_session)
 
 
-def create_cluster_info_agent(db: AsyncSession):
+def create_cluster_info_agent(db_session=None):
     """Create cluster info agent."""
-    return ClusterInfoAgent(db_session=db)
+    return ClusterInfoAgent(db_session=db_session)
 
 
-def create_cluster_health_agent(db: AsyncSession):
+def create_cluster_health_agent(db_session=None):
     """Create cluster health agent."""
-    return ClusterHealthAgent(db_session=db)
+    return ClusterHealthAgent(db_session=db_session)
 
 
-def create_memory_agent(db: AsyncSession):
+def create_memory_agent(db_session=None):
     """Create memory agent."""
-    return MemoryAgent(db_session=db)
+    return MemoryAgent(db_session=db_session)
 
 
-def create_mcp_agent():
+def create_mcp_agent(db_session=None):
     """Create MCP agent."""
     return MCPAgent(mcp_client=default_mcp_client)
 
 
-def create_llm_agent():
+def create_llm_agent(db_session=None):
     """Create LLM agent for general queries."""
     return LLMAgent()

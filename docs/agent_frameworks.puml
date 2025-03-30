@@ -1,0 +1,82 @@
+@startuml Agent Frameworks
+
+' Define the components
+package "Agent Frameworks" {
+  ' Route Framework
+  component "Route Agent Framework" as RouteFramework {
+    component "Router Agent" as RouterAgent
+    component "Specialized Agents" as SpecializedAgents {
+      component "Cluster Register Agent" as ClusterRegisterAgent
+      component "Cluster Info Agent" as ClusterInfoAgent
+      component "Cluster Health Agent" as ClusterHealthAgent
+      component "Memory Agent" as MemoryAgent
+      component "MCP Agent" as MCPAgent
+      component "LLM Agent" as LLMAgent
+    }
+  }
+
+  ' React Framework
+  component "React Agent Framework" as ReactFramework {
+    component "React Process" as ReactProcess
+    component "Thought" as Thought
+    component "Action" as Action
+    component "Tool Execution" as ToolExecution
+    component "Observation" as Observation
+    component "Final Answer" as ReactFinalAnswer
+  }
+
+  ' Plan Framework
+  component "Plan Agent Framework" as PlanFramework {
+    component "Planning Phase" as PlanningPhase
+    component "Plan" as Plan
+    component "Execution Phase" as ExecutionPhase
+    component "Step Execution" as StepExecution
+    component "Final Response" as PlanFinalResponse
+  }
+
+  ' Direct LLM Response
+  component "Direct LLM Response" as DirectLLM
+}
+
+' Define relationships for Route Framework
+RouterAgent -down-> SpecializedAgents : Route to
+SpecializedAgents -right-> "Response" : Generate
+
+' Define relationships for React Framework
+ReactProcess -down-> Thought : Generate
+Thought -down-> Action : Decide
+Action -down-> ToolExecution : Execute
+ToolExecution -down-> Observation : Observe
+Observation -up-> ReactProcess : Loop back
+Observation -right-> ReactFinalAnswer : When solved
+
+' Define relationships for Plan Framework
+PlanningPhase -down-> Plan : Create
+Plan -down-> ExecutionPhase : Execute
+ExecutionPhase -down-> StepExecution : Step by step
+StepExecution -right-> PlanFinalResponse : Generate
+
+' Add notes
+note right of RouterAgent
+  Analyzes user input and determines
+  which specialized agent should handle it
+end note
+
+note right of ReactProcess
+  Iterative process of thinking,
+  acting, and observing until
+  the problem is solved
+end note
+
+note right of PlanningPhase
+  Creates a detailed plan before
+  execution, breaking the problem
+  into manageable steps
+end note
+
+note right of DirectLLM
+  Bypasses frameworks and agents
+  for simple informational queries
+end note
+
+@enduml

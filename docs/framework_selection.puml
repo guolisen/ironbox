@@ -1,0 +1,62 @@
+@startuml Framework Selection Logic
+
+' Define the components
+actor User
+component "Framework Selector" as Selector
+component "Route Framework" as Route
+component "React Framework" as React
+component "Plan Framework" as Plan
+component "Direct LLM" as Direct
+
+' Define relationships
+User -down-> Selector : Query
+Selector -down-> Route : Simple Categorizable Query
+Selector -down-> React : Reasoning & Action Problem
+Selector -down-> Plan : Complex Multi-Step Problem
+Selector -down-> Direct : Simple Informational Question
+
+' Add notes
+note right of Selector
+  The Framework Selector analyzes the query
+  and selects the appropriate framework
+  based on the following criteria:
+  
+  1. Query complexity
+  2. Need for reasoning
+  3. Need for planning
+  4. Need for specialized agents
+end note
+
+note right of Route
+  For queries that fit into predefined categories:
+  - Cluster registration
+  - Cluster information retrieval
+  - Health checks
+  - Memory retrieval
+  - MCP operations
+end note
+
+note right of React
+  For problems that require reasoning and action:
+  - Multi-step tasks with tool usage
+  - Conditional logic based on observations
+  - Interactive problem solving
+end note
+
+note right of Plan
+  For complex multi-step problems:
+  - Tasks requiring upfront planning
+  - Complex logical problems
+  - Optimization problems
+  - Multi-stage workflows
+end note
+
+note right of Direct
+  For simple informational queries:
+  - Kubernetes concepts
+  - Best practices
+  - General questions
+  - Simple explanations
+end note
+
+@enduml

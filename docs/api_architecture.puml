@@ -1,0 +1,66 @@
+@startuml API Architecture
+
+' Define the components
+actor "Client" as Client
+component "API Server" as APIServer {
+  component "FastAPI App" as FastAPI
+  component "Routes" as Routes {
+    component "Query Route" as QueryRoute
+    component "Cluster Routes" as ClusterRoutes
+    component "MCP Routes" as MCPRoutes
+    component "Memory Routes" as MemoryRoutes
+  }
+  component "Middleware" as Middleware
+}
+
+component "Agent Core" as AgentCore
+component "Frameworks" as Frameworks
+component "Kubernetes Client" as K8sClient
+component "MCP Client" as MCPClient
+component "Memory System" as MemorySystem
+database "Database" as DB
+
+' Define relationships
+Client -down-> APIServer : HTTP Requests
+FastAPI -down-> Routes : Defines
+FastAPI -down-> Middleware : Uses
+
+QueryRoute -down-> AgentCore : Process Query
+ClusterRoutes -down-> K8sClient : Manage Clusters
+MCPRoutes -down-> MCPClient : Access MCP Servers
+MemoryRoutes -down-> MemorySystem : Manage Memory
+
+AgentCore -down-> Frameworks : Uses
+AgentCore -down-> DB : Stores Results
+K8sClient -down-> DB : Stores Cluster Info
+MemorySystem -down-> DB : Stores Memories
+
+' Add notes
+note right of FastAPI
+  Built with FastAPI framework
+  Handles HTTP requests and responses
+  Provides OpenAPI documentation
+end note
+
+note right of Routes
+  Organized by functionality:
+  - Query processing
+  - Cluster management
+  - MCP operations
+  - Memory management
+end note
+
+note right of Middleware
+  Includes:
+  - Authentication
+  - Logging
+  - Error handling
+  - CORS
+end note
+
+note right of AgentCore
+  Main entry point for processing
+  user queries through the API
+end note
+
+@enduml

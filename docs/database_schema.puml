@@ -1,0 +1,150 @@
+@startuml Database Schema
+
+' Define the entities
+entity "Users" as users {
+  * id : INTEGER <<PK>>
+  --
+  * username : TEXT
+  * email : TEXT
+  * password_hash : TEXT
+  * created_at : TIMESTAMP
+  * last_login : TIMESTAMP
+  * is_active : BOOLEAN
+}
+
+entity "Sessions" as sessions {
+  * id : INTEGER <<PK>>
+  --
+  * user_id : INTEGER <<FK>>
+  * session_token : TEXT
+  * created_at : TIMESTAMP
+  * expires_at : TIMESTAMP
+  * is_active : BOOLEAN
+}
+
+entity "Clusters" as clusters {
+  * id : INTEGER <<PK>>
+  --
+  * name : TEXT
+  * api_endpoint : TEXT
+  * created_at : TIMESTAMP
+  * updated_at : TIMESTAMP
+  * status : TEXT
+  * owner_id : INTEGER <<FK>>
+  * config : JSON
+}
+
+entity "Memories" as memories {
+  * id : INTEGER <<PK>>
+  --
+  * user_id : INTEGER <<FK>>
+  * content : TEXT
+  * created_at : TIMESTAMP
+  * last_accessed : TIMESTAMP
+  * importance : FLOAT
+  * metadata : JSON
+}
+
+entity "VectorEmbeddings" as embeddings {
+  * id : INTEGER <<PK>>
+  --
+  * memory_id : INTEGER <<FK>>
+  * embedding : BLOB
+  * model : TEXT
+  * dimension : INTEGER
+}
+
+entity "ChatHistory" as chat_history {
+  * id : INTEGER <<PK>>
+  --
+  * user_id : INTEGER <<FK>>
+  * session_id : INTEGER <<FK>>
+  * message : TEXT
+  * role : TEXT
+  * timestamp : TIMESTAMP
+  * metadata : JSON
+}
+
+entity "Tools" as tools {
+  * id : INTEGER <<PK>>
+  --
+  * name : TEXT
+  * description : TEXT
+  * type : TEXT
+  * parameters : JSON
+  * is_active : BOOLEAN
+}
+
+entity "ToolExecutions" as tool_executions {
+  * id : INTEGER <<PK>>
+  --
+  * tool_id : INTEGER <<FK>>
+  * user_id : INTEGER <<FK>>
+  * session_id : INTEGER <<FK>>
+  * parameters : JSON
+  * result : TEXT
+  * status : TEXT
+  * timestamp : TIMESTAMP
+}
+
+entity "MCPServers" as mcp_servers {
+  * id : INTEGER <<PK>>
+  --
+  * name : TEXT
+  * endpoint : TEXT
+  * status : TEXT
+  * last_connected : TIMESTAMP
+  * capabilities : JSON
+}
+
+' Define relationships
+users ||--o{ sessions : "has"
+users ||--o{ clusters : "owns"
+users ||--o{ memories : "has"
+users ||--o{ chat_history : "has"
+users ||--o{ tool_executions : "performs"
+
+sessions ||--o{ chat_history : "contains"
+sessions ||--o{ tool_executions : "includes"
+
+memories ||--|| embeddings : "has"
+
+tools ||--o{ tool_executions : "executed as"
+
+' Add notes
+note bottom of users
+  Stores user account information
+  and authentication details
+end note
+
+note bottom of clusters
+  Stores information about Kubernetes
+  clusters registered with the system
+end note
+
+note bottom of memories
+  Stores user-specific memories
+  for contextual retrieval
+end note
+
+note bottom of embeddings
+  Stores vector embeddings for
+  semantic search of memories
+end note
+
+note bottom of chat_history
+  Stores conversation history
+  between users and the system
+end note
+
+note bottom of tools
+  Stores information about available
+  tools that can be used by agents
+end note
+
+note bottom of mcp_servers
+  Stores information about connected
+  MCP servers and their capabilities
+end note
+
+@enduml

@@ -1,0 +1,111 @@
+@startuml MCP Integration
+
+' Define the components
+actor "User" as User
+component "Ironbox System" as Ironbox {
+  component "MCP Agent" as MCPAgent
+  component "MCP Client" as MCPClient
+  component "Tool Repository" as ToolRepo
+  component "Agent Frameworks" as Frameworks
+}
+
+package "MCP Servers" {
+  component "Weather Server" as WeatherServer
+  component "Custom MCP Server" as CustomServer
+  component "Future MCP Servers" as FutureServers
+}
+
+component "External APIs" as ExternalAPIs
+
+' Define relationships
+User -down-> MCPAgent : Query
+MCPAgent -down-> MCPClient : Use
+MCPClient -down-> WeatherServer : Connect
+MCPClient -down-> CustomServer : Connect
+MCPClient -down-> FutureServers : Connect
+WeatherServer -down-> ExternalAPIs : Call
+CustomServer -down-> ExternalAPIs : Call
+MCPClient -right-> ToolRepo : Register Tools
+ToolRepo -up-> Frameworks : Provide Tools
+
+' Add notes
+note right of MCPAgent
+  Specialized agent for MCP operations:
+  - Managing MCP servers
+  - Executing MCP tools
+  - Accessing MCP resources
+end note
+
+note right of MCPClient
+  Core component for MCP integration:
+  - Connects to MCP servers
+  - Manages server lifecycle
+  - Wraps MCP tools as local tools
+  - Handles JSON-RPC communication
+end note
+
+note right of ToolRepo
+  Registers MCP tools alongside local tools
+  with a unified interface for agent frameworks
+end note
+
+note right of WeatherServer
+  Example MCP server that provides:
+  - Current weather information
+  - Weather forecasts
+  - Historical weather data
+end note
+
+note right of CustomServer
+  Custom MCP server that can be
+  created by users to extend the
+  system's capabilities
+end note
+
+' Add sequence diagram for MCP tool execution
+newpage MCP Tool Execution Flow
+
+actor "User" as User
+participant "MCP Agent" as Agent
+participant "Agent Framework" as Framework
+participant "Tool Repository" as ToolRepo
+participant "MCP Client" as Client
+participant "MCP Server" as Server
+participant "External API" as API
+
+' MCP tool execution flow
+User -> Agent : "What's the weather in San Francisco?"
+Agent -> Framework : process_query(query)
+Framework -> ToolRepo : get_tool("get_weather")
+ToolRepo --> Framework : mcp_tool_wrapper
+Framework -> Client : execute_mcp_tool("get_weather", {"city": "San Francisco"})
+Client -> Server : JSON-RPC request
+Server -> API : HTTP request
+API --> Server : HTTP response
+Server --> Client : JSON-RPC response
+Client --> Framework : formatted result
+Framework -> Framework : Generate response with result
+Framework --> Agent : response
+Agent --> User : "The weather in San Francisco is sunny with a temperature of 72°F"
+
+' MCP server registration flow
+newpage MCP Server Registration Flow
+
+actor "User" as User
+participant "MCP Agent" as Agent
+participant "MCP Client" as Client
+participant "New MCP Server" as NewServer
+database "Database" as DB
+
+User -> Agent : "Register a new MCP server"
+Agent -> Client : register_server(server_info)
+Client -> NewServer : Connect and verify
+NewServer --> Client : Server capabilities
+Client -> DB : Store server info
+DB --> Client : Success
+Client -> Client : Create tool wrappers
+Client -> ToolRepo : Register MCP tools
+Client --> Agent : Server registered
+Agent --> User : "New MCP server registered successfully with 5 tools available"
+
+@enduml

@@ -30,3 +30,6 @@ plotly
 setuptools
 ollama
 langchain_ollama
+jupyter_contrib_nbextensions
+notebook
+#jupyter

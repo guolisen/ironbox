@@ -1,0 +1,181 @@
+@startuml Deployment Architecture
+
+' Define the components
+actor "User" as User
+node "Kubernetes Cluster" as K8sCluster {
+  package "Ironbox Namespace" {
+    node "API Pod" as APIPod {
+      component "API Server" as APIServer
+      component "FastAPI App" as FastAPI
+    }
+    
+    node "Agent Pods" as AgentPods {
+      node "Agent Core Pod" as AgentCorePod {
+        component "Agent Core" as AgentCore
+        component "Framework Selector" as FrameworkSelector
+      }
+      
+      node "Specialized Agent Pods" as SpecializedAgentPods {
+        component "Cluster Register Agent" as ClusterRegisterAgent
+        component "Cluster Info Agent" as ClusterInfoAgent
+        component "Cluster Health Agent" as ClusterHealthAgent
+        component "Memory Agent" as MemoryAgent
+        component "MCP Agent" as MCPAgent
+        component "LLM Agent" as LLMAgent
+      }
+    }
+    
+    node "MCP Server Pods" as MCPServerPods {
+      component "Weather Server" as WeatherServer
+      component "Custom MCP Servers" as CustomMCPServers
+    }
+    
+    node "Database Pod" as DBPod {
+      database "SQLite Database" as SQLiteDB
+    }
+    
+    node "UI Pod" as UIPod {
+      component "Web UI" as WebUI
+      component "Streamlit App" as StreamlitApp
+    }
+  }
+  
+  node "Monitored Kubernetes Clusters" as MonitoredClusters {
+    component "Production Cluster" as ProductionCluster
+    component "Development Cluster" as DevelopmentCluster
+    component "Testing Cluster" as TestingCluster
+  }
+}
+
+cloud "External Services" as ExternalServices {
+  component "LLM API" as LLMAPI
+  component "External APIs" as ExternalAPIs
+}
+
+' Define relationships
+User -down-> WebUI : Access
+User -down-> APIServer : Direct API Access
+
+APIServer -down-> AgentCore : Forward Queries
+APIServer -down-> SQLiteDB : Store/Retrieve Data
+
+AgentCore -down-> SpecializedAgentPods : Use
+AgentCore -down-> MCPServerPods : Use
+AgentCore -right-> LLMAPI : Generate Text/Embeddings
+
+SpecializedAgentPods -down-> MonitoredClusters : Monitor & Manage
+MCPServerPods -right-> ExternalAPIs : Access
+
+WebUI -down-> APIServer : API Calls
+
+' Add notes
+note right of K8sCluster
+  The Ironbox system is deployed as a set of
+  microservices in a Kubernetes cluster
+end note
+
+note right of APIPod
+  Entry point for user interactions
+  Handles HTTP requests and authentication
+end note
+
+note right of AgentCorePod
+  Core processing logic for user queries
+  Selects appropriate frameworks and agents
+end note
+
+note right of SpecializedAgentPods
+  Specialized agents for different tasks
+  Can be scaled independently based on load
+end note
+
+note right of MCPServerPods
+  MCP servers that extend the system's capabilities
+  Can be deployed and scaled independently
+end note
+
+note right of DBPod
+  Persistent storage for the system
+  Stores user data, memories, and system state
+end note
+
+note right of UIPod
+  Web-based user interface
+  Built with Streamlit for interactive experience
+end note
+
+note right of MonitoredClusters
+  Kubernetes clusters that are monitored
+  and managed by the Ironbox system
+end note
+
+' Add deployment view
+newpage Deployment Configuration
+
+package "Kubernetes Resources" {
+  component "Deployments" as Deployments {
+    component "api-deployment" as APIDeployment
+    component "agent-core-deployment" as AgentCoreDeployment
+    component "specialized-agents-deployment" as SpecializedAgentsDeployment
+    component "mcp-servers-deployment" as MCPServersDeployment
+    component "ui-deployment" as UIDeployment
+  }
+  
+  component "Services" as Services {
+    component "api-service" as APIService
+    component "agent-core-service" as AgentCoreService
+    component "specialized-agents-service" as SpecializedAgentsService
+    component "mcp-servers-service" as MCPServersService
+    component "ui-service" as UIService
+  }
+  
+  component "ConfigMaps" as ConfigMaps {
+    component "ironbox-config" as IronboxConfig
+    component "agent-prompts" as AgentPrompts
+  }
+  
+  component "Secrets" as Secrets {
+    component "db-credentials" as DBCredentials
+    component "api-keys" as APIKeys
+    component "llm-credentials" as LLMCredentials
+  }
+  
+  component "PersistentVolumeClaims" as PVCs {
+    component "db-pvc" as DBPVC
+    component "memory-pvc" as MemoryPVC
+  }
+  
+  component "Ingress" as Ingress {
+    component "ironbox-ingress" as IronboxIngress
+  }
+}
+
+' Define relationships
+APIDeployment -down-> APIService : Exposes
+AgentCoreDeployment -down-> AgentCoreService : Exposes
+SpecializedAgentsDeployment -down-> SpecializedAgentsService : Exposes
+MCPServersDeployment -down-> MCPServersService : Exposes
+UIDeployment -down-> UIService : Exposes
+
+APIDeployment -down-> IronboxConfig : Uses
+APIDeployment -down-> APIKeys : Uses
+
+AgentCoreDeployment -down-> IronboxConfig : Uses
+AgentCoreDeployment -down-> AgentPrompts : Uses
+AgentCoreDeployment -down-> LLMCredentials : Uses
+
+SpecializedAgentsDeployment -down-> IronboxConfig : Uses
+SpecializedAgentsDeployment -down-> APIKeys : Uses
+
+MCPServersDeployment -down-> IronboxConfig : Uses
+MCPServersDeployment -down-> APIKeys : Uses
+
+UIDeployment -down-> IronboxConfig : Uses
+
+DBPod -down-> DBPVC : Uses
+MemoryAgent -down-> MemoryPVC : Uses
+
+IronboxIngress -down-> APIService : Routes to
+IronboxIngress -down-> UIService : Routes to
+
+@enduml

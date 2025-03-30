@@ -1,0 +1,113 @@
+@startuml Class Hierarchy
+
+' Define the classes
+abstract class AgentFramework {
+  +llm
+  +{abstract} process(state: AgentState): AgentState
+  +get_framework_type(): str
+}
+
+class RouteAgentFramework {
+  +agents: Dict[str, Any]
+  +system_prompt: str
+  +process(state: AgentState): AgentState
+  +get_framework_type(): str
+}
+
+class ReactAgentFramework {
+  +tools: Dict[str, Callable]
+  +system_prompt: str
+  +process(state: AgentState): AgentState
+  +get_framework_type(): str
+}
+
+class PlanAgentFramework {
+  +tools: Dict[str, Callable]
+  +planning_prompt: str
+  +execution_prompt: str
+  +process(state: AgentState): AgentState
+  +_create_plan(problem: str, tool_descriptions: str): List[PlanStep]
+  +_execute_plan(problem: str, plan: List[PlanStep], tool_descriptions: str): List[PlanStep]
+  +_generate_final_response(problem: str, plan: List[PlanStep], results: List[PlanStep]): str
+  +get_framework_type(): str
+}
+
+class FrameworkSelector {
+  +llm
+  +system_prompt: str
+  +select_framework(query: str): str
+}
+
+class AgentCore {
+  +llm
+  +framework_selector: FrameworkSelector
+  +frameworks: Dict[str, AgentFramework]
+  +tools: Dict[str, Callable]
+  +agents: Dict[str, Callable]
+  +register_framework(framework_type: str, framework: AgentFramework): void
+  +register_tool(tool_name: str, tool_func: Callable): void
+  +register_agent(agent_type: str, agent: Callable): void
+  +setup_route_framework(): void
+  +setup_react_framework(): void
+  +setup_plan_framework(): void
+  +process_query(query: str, session_id: Optional[str], chat_history: Optional[List[Dict[str, str]]]): Dict[str, Any]
+  +_process_direct(state: AgentState): AgentState
+  +_extract_response(state: AgentState): str
+}
+
+class ReactStep {
+  +thought: str
+  +action: str
+  +action_input: Dict[str, Any]
+  +observation: Optional[str]
+}
+
+class PlanStep {
+  +description: str
+  +completed: bool
+  +result: Optional[str]
+}
+
+' Define relationships
+AgentFramework <|-- RouteAgentFramework
+AgentFramework <|-- ReactAgentFramework
+AgentFramework <|-- PlanAgentFramework
+
+AgentCore *-- FrameworkSelector
+AgentCore *-- "0..*" AgentFramework
+
+ReactAgentFramework *-- "0..*" ReactStep
+PlanAgentFramework *-- "0..*" PlanStep
+
+' Add notes
+note right of AgentFramework
+  Abstract base class for all agent frameworks
+  Defines the common interface for processing queries
+end note
+
+note right of RouteAgentFramework
+  Original framework that routes queries
+  to specialized agents based on query type
+end note
+
+note right of ReactAgentFramework
+  Framework that uses the React paradigm
+  (Reason + Act) for reasoning and action
+end note
+
+note right of PlanAgentFramework
+  Framework that creates a plan before execution
+  for complex multi-step problems
+end note
+
+note right of FrameworkSelector
+  Selects the appropriate framework
+  based on query type and complexity
+end note
+
+note right of AgentCore
+  Main entry point for processing user queries
+  Manages frameworks, tools, and agents
+end note
+
+@enduml

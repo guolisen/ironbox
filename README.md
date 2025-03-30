@@ -9,10 +9,58 @@ IronBox is a powerful multi-agent platform designed to integrate any kind of age
 ## Features
 
 - **Multi-Agent Architecture**: Specialized agents for different tasks
+- **Multiple Agent Frameworks**: Different frameworks for different problem types
+  - **Route Agent Framework**: For simple queries that fit into predefined categories
+  - **React Agent Framework**: For problems that require reasoning and action
+  - **Plan Agent Framework**: For complex problems that require planning
+- **Intelligent Framework Selection**: Automatically selects the appropriate framework based on query type
 - **Extensible Framework**: Add new agents and capabilities for any use case
 - **Memory System**: Retain context and parameters across conversations
 - **MCP Integration**: Use Model Context Protocol for tool integration
 - **User Interfaces**: REST API and Streamlit UI
+
+## Example Queries
+
+IronBox can handle a wide range of query types, automatically selecting the appropriate framework:
+
+### Route Framework (Simple Categorizable Queries)
+
+```
+Register a new Kubernetes cluster named production with API server https://k8s.example.com:6443
+Show me all the registered clusters
+Check the health of the production cluster
+What was the last cluster I registered?
+What's the weather like in London today?
+```
+
+### React Framework (Reasoning and Action Queries)
+
+```
+Check how many pods are in the production cluster and which ones are not running
+Find any pods in the staging cluster that have been restarting frequently and restart them
+Should we deploy to the outdoor edge clusters today based on the weather forecast?
+```
+
+### Plan Framework (Complex Multi-Step Problems)
+
+```
+I need to migrate workloads from the staging cluster to production. Help me plan and execute this.
+Our production cluster is running out of resources. Analyze usage patterns and suggest optimization strategies.
+We have 5 microservices that need to be deployed across 3 clusters with specific affinity rules. Help me determine the optimal placement.
+```
+
+### Direct LLM Response (Simple Informational Queries)
+
+```
+What is a Kubernetes pod?
+What are the best practices for securing a Kubernetes cluster?
+What's the difference between a Deployment and a StatefulSet?
+```
+
+For more detailed examples and explanations, see the following documentation:
+- [Enhanced Architecture Q&A](docs/enhanced_architecture_qa.md)
+- [Framework Selection Q&A](docs/framework_selection_qa.md) - Explains how the system decides which agent framework to use
+- [Logging Configuration](docs/logging.md) - Details on logging configuration and viewing logs
 
 ### Current Implementations
 
@@ -133,12 +181,46 @@ The UI will be available at http://localhost:8501 by default.
 
 ## Architecture
 
-IronBox uses a LangGraph-based agent orchestration system with the following components:
+IronBox uses a LangGraph-based agent orchestration system with multiple agent frameworks:
 
-- **Router Agent**: Directs requests to specialized agents
-- **Memory Agent**: Manages conversation context
-- **MCP Agent**: Integrates with external tools
-- **Specialized Agents**: Task-specific agents that can be added to the framework
+### Agent Core
+
+The Agent Core is the main entry point for processing user queries. It:
+- Analyzes the query to select the appropriate framework
+- Initializes the selected framework with the necessary agents and tools
+- Processes the query using the selected framework
+- Returns the response to the user
+
+### Agent Frameworks
+
+IronBox supports multiple agent frameworks, each designed for different types of problems:
+
+1. **Route Agent Framework** (Original Framework)
+   - Directs requests to specialized agents based on query type
+   - Good for simple queries that fit into predefined categories
+   - Uses a router agent to determine which specialized agent should handle the request
+
+2. **React Agent Framework**
+   - Uses the React paradigm (Reason + Act)
+   - Good for problems that require reasoning and action
+   - Executes a loop of thinking, acting, and observing until the problem is solved
+
+3. **Plan Agent Framework**
+   - Creates a plan before execution
+   - Good for complex problems that require planning
+   - First creates a step-by-step plan, then executes each step in order
+
+4. **Direct LLM Response**
+   - For simple questions that don't require special handling
+   - Bypasses frameworks and agents for efficiency
+
+### Framework Selection
+
+The system automatically selects the appropriate framework based on the query type:
+- Simple categorizable queries → Route Framework
+- Reasoning and action problems → React Framework
+- Complex multi-step problems → Plan Framework
+- Simple informational questions → Direct LLM Response
 
 ### Current Agent Types
 - **Cluster Register Agent**: Handles Kubernetes cluster registration
@@ -150,12 +232,32 @@ IronBox uses a LangGraph-based agent orchestration system with the following com
 
 ## Extending IronBox
 
-IronBox is designed to be easily extended with new agents and functionality:
+IronBox is designed to be easily extended with new agents, frameworks, and functionality:
+
+### Adding New Agents
 
 1. **Create a new agent**: Implement a new agent class that follows the agent interface
-2. **Register the agent**: Add the agent to the agent graph
+2. **Register the agent**: Add the agent to the agent core
 3. **Update the router**: Ensure the router can direct requests to your new agent
-4. **Add MCP servers**: Integrate external tools through the MCP protocol
+
+### Adding New Tools
+
+1. **Create a new tool**: Implement a new tool function with appropriate documentation
+2. **Register the tool**: Add the tool to the agent core
+3. **Use in frameworks**: The tool will be available in React and Plan frameworks
+
+### Creating Custom Frameworks
+
+1. **Extend the base framework**: Implement a new framework class that extends AgentFramework
+2. **Implement the process method**: Define how the framework processes queries
+3. **Register the framework**: Add the framework to the agent core
+
+### Adding MCP Servers
+
+Integrate external tools through the MCP protocol:
+1. **Create an MCP server**: Implement a new MCP server with tools and resources
+2. **Register the server**: Add the server to the MCP client configuration
+3. **Use in agents**: The MCP tools will be available to the MCP agent
 
 See the documentation in `docs/` for detailed instructions on extending IronBox.
 
@@ -173,6 +275,8 @@ pytest
 pytest ironbox/tests/test_core.py
 pytest ironbox/tests/test_api.py
 pytest ironbox/tests/test_agents.py
+pytest ironbox/tests/test_agent_frameworks.py
+pytest ironbox/tests/test_import.py
 
 # Run tests with coverage report
 pytest --cov=ironbox
@@ -182,15 +286,11 @@ pytest -v
 
 # Run specific test functions
 pytest ironbox/tests/test_core.py::test_router_agent
-pytest ironbox/tests/test_api.py::test_chat
+pytest ironbox/tests/test_agent_frameworks.py::test_react_framework
 ```
 
 The test suite uses pytest fixtures to mock dependencies like the LLM, Kubernetes client, and MCP client, allowing for isolated testing of components without external dependencies.
 
 For integration tests that require a real database, the tests use an in-memory SQLite database that is created and destroyed for each test session.
-
-### Adding New Agents
-
-See the documentation in `docs/` for details on extending IronBox with new agents.
 
 ## License

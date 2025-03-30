@@ -1,0 +1,78 @@
+@startuml Tool Repository Integration
+
+' Define the components
+package "Tool Repository" {
+  component "Local Tools" as LocalTools {
+    component "get_pod_count" as PodCount
+    component "get_node_status" as NodeStatus
+    component "restart_pod" as RestartPod
+    component "scale_deployment" as ScaleDeployment
+    component "solve_logical_problem" as SolveLogical
+  }
+  
+  component "MCP Tools" as MCPTools {
+    component "MCP Tool Wrappers" as MCPWrappers
+    component "MCP Client" as MCPClient
+  }
+}
+
+component "Agent Core" as AgentCore
+component "React Framework" as ReactFramework
+component "Plan Framework" as PlanFramework
+component "MCP Servers" as MCPServers
+
+' Define relationships
+AgentCore -down-> LocalTools : Register
+AgentCore -down-> MCPTools : Register
+ReactFramework -right-> LocalTools : Use
+ReactFramework -right-> MCPTools : Use
+PlanFramework -right-> LocalTools : Use
+PlanFramework -right-> MCPTools : Use
+MCPWrappers -down-> MCPClient : Call
+MCPClient -down-> MCPServers : Invoke
+
+' Add notes
+note right of LocalTools
+  Local tools are defined as Python functions
+  within the application and registered
+  directly with the agent core
+end note
+
+note right of MCPTools
+  MCP tools are provided by external MCP servers
+  and accessed through the MCP client with
+  wrapper functions
+end note
+
+note right of AgentCore
+  The Agent Core manages tool registration
+  and provides a unified interface for
+  accessing both local and MCP tools
+end note
+
+' Add sequence diagram for tool invocation
+newpage Tool Invocation Flow
+
+actor "Framework" as Framework
+participant "Tool Repository" as ToolRepo
+participant "Tool Function" as Tool
+participant "MCP Client" as Client
+participant "MCP Server" as Server
+
+' Local tool invocation
+Framework -> ToolRepo : Look up tool "get_pod_count"
+ToolRepo --> Framework : Return function reference
+Framework -> Tool : Call with arguments
+Tool -> Tool : Execute implementation
+Tool --> Framework : Return result
+
+' MCP tool invocation
+Framework -> ToolRepo : Look up tool "mcp_weather_get_current_weather"
+ToolRepo --> Framework : Return wrapper function
+Framework -> Client : Call wrapper with arguments
+Client -> Server : Send JSON-RPC request
+Server -> Server : Process request
+Server --> Client : Return JSON-RPC response
+Client --> Framework : Return parsed result
+
+@enduml

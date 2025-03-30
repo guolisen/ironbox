@@ -1,0 +1,62 @@
+@startuml Overall Architecture
+
+' Define the components
+actor User
+component "Agent Core" as AgentCore
+component "Framework Selector" as FrameworkSelector
+package "Agent Frameworks" {
+  component "Route Agent Framework" as RouteFramework
+  component "React Agent Framework" as ReactFramework
+  component "Plan Agent Framework" as PlanFramework
+  component "Direct LLM Response" as DirectLLM
+}
+package "Tools & Agents" {
+  component "Tool Repository" as ToolRepo
+  component "Specialized Agents" as Agents
+}
+component "Response" as Response
+
+' Define relationships
+User -right-> AgentCore : Query
+AgentCore -down-> FrameworkSelector : Analyze Query
+FrameworkSelector -down-> RouteFramework : Simple Categorizable Query
+FrameworkSelector -down-> ReactFramework : Reasoning & Action Problem
+FrameworkSelector -down-> PlanFramework : Complex Multi-Step Problem
+FrameworkSelector -down-> DirectLLM : Simple Informational Question
+
+RouteFramework -down-> Agents : Use
+ReactFramework -down-> ToolRepo : Use
+PlanFramework -down-> ToolRepo : Use
+DirectLLM -down-> Response : Generate
+
+RouteFramework -right-> Response : Generate
+ReactFramework -right-> Response : Generate
+PlanFramework -right-> Response : Generate
+
+' Add notes
+note right of AgentCore
+  The Agent Core is the main entry point 
+  for processing user queries
+end note
+
+note right of FrameworkSelector
+  Selects the appropriate framework
+  based on query type and complexity
+end note
+
+note bottom of ToolRepo
+  Contains both local tools and MCP tools
+  with a unified interface
+end note
+
+note bottom of Agents
+  Specialized agents for different tasks:
+  - Cluster Register Agent
+  - Cluster Info Agent
+  - Cluster Health Agent
+  - Memory Agent
+  - MCP Agent
+  - LLM Agent
+end note
+
+@enduml
