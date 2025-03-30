@@ -144,6 +144,9 @@ IronBox uses a LangGraph-based agent orchestration system with the following com
 - **Cluster Register Agent**: Handles Kubernetes cluster registration
 - **Cluster Health Agent**: Analyzes Kubernetes cluster health
 - **Cluster Info Agent**: Provides information about registered clusters
+- **Memory Agent**: Retrieves information from conversation history
+- **MCP Agent**: Interfaces with Model Context Protocol tools
+- **LLM Agent**: Handles general queries that don't align with specialized agents
 
 ## Extending IronBox
 
