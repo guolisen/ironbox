@@ -1,6 +1,6 @@
-# Enhanced Architecture Q&A
+# LangChain and LangGraph Enhanced Architecture Q&A
 
-This document captures the questions and answers related to the enhanced multi-agent architecture implementation for IronBox.
+This document captures the questions and answers related to the enhanced multi-agent architecture implementation using LangChain and LangGraph.
 
 ## Core Design Enhancement
 

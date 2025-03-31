@@ -1,24 +1,26 @@
-# Framework Selection Q&A
+# LangChain and LangGraph Framework Selection
 
-## Question: How does the core code decide which agent framework to be used?
+## Question: How does the system decide which agent framework to use?
 
-The IronBox system uses a sophisticated framework selection mechanism that analyzes each user query to determine the most appropriate agent framework. Here's how it works:
+The IronBox system uses LangChain and LangGraph to implement a sophisticated framework selection mechanism that analyzes user queries and routes them to the appropriate framework. Here's how it works:
 
 ## Framework Selection Process
 
 1. When a query is received, it's passed to the `process_query` method in the `AgentCore` class
-2. This method calls `framework_selector.select_framework(query)` to determine which framework to use
-3. The framework selector uses an LLM to analyze the query and select the appropriate framework
-4. Based on the LLM's response, one of four frameworks is selected: Route, React, Plan, or Direct
+2. The query is then passed to the `FrameworkRegistry`, which initializes the LangGraph state
+3. The first node in the LangGraph is the `FrameworkSelector`, which determines which framework to use
+4. Based on the LLM's analysis, the query is routed through the graph to the appropriate framework
+5. The selected framework processes the query and returns the result
 
-## The FrameworkSelector Class
+## The Framework Selector
 
-The core of this decision-making is in the `FrameworkSelector` class (in `ironbox/core/agent_framework.py`), which:
+The core of this decision-making is in the `FrameworkSelector` class (in `ironbox/core/framework_selector.py`), which:
 
 1. Takes the user query as input
-2. Passes it to the LLM with a specific system prompt that explains the available frameworks
+2. Uses LangChain to create a prompt for the LLM
 3. Analyzes the LLM's response to determine which framework to use
-4. Returns the selected framework type as a string
+4. Updates the state with the selected framework type
+5. Returns the updated state which is used by LangGraph for routing
 
 Here's the relevant system prompt used:
 
@@ -68,38 +70,66 @@ Each framework is designed for specific types of queries:
      - General questions
      - Simple explanations
 
-## Implementation Details
+## LangGraph Integration
 
-After the framework is selected, the `process_query` method in `AgentCore` processes the query using the selected framework:
+The framework selection is integrated with LangGraph for orchestration:
 
 ```python
-# Select framework
-framework_type = await self.framework_selector.select_framework(query)
-logger.debug("Selected framework: %s", framework_type)
+# Define conditional routing in the graph configuration
+graph_config = {
+    "entry_point": "framework_selector",
+    "edges": [
+        {
+            "from": "framework_selector",
+            "to": "route_framework",
+            "condition": "state.agent_outputs.get('framework_selector', {}).get('framework_type') == 'route'"
+        },
+        {
+            "from": "framework_selector",
+            "to": "react_framework",
+            "condition": "state.agent_outputs.get('framework_selector', {}).get('framework_type') == 'react'"
+        },
+        {
+            "from": "framework_selector",
+            "to": "plan_framework",
+            "condition": "state.agent_outputs.get('framework_selector', {}).get('framework_type') == 'plan'"
+        }
+    ]
+}
 
-# Process query with selected framework
-if framework_type == "direct":
-    # Direct LLM response without using any framework
-    state = await self._process_direct(state)
-elif framework_type in self.frameworks:
-    # Process with selected framework
-    framework = self.frameworks[framework_type]
-    state = await framework.process(state)
-else:
-    # Fallback to route framework
-    logger.warning(f"Framework {framework_type} not found, falling back to route")
-    if "route" in self.frameworks:
-        framework = self.frameworks["route"]
-        state = await framework.process(state)
-    else:
-        # Direct LLM response as last resort
-        state = await self._process_direct(state)
+# Build the graph
+graph = StateGraph(AgentState)
+        
+# Add nodes for each framework
+for name, framework in self.frameworks.items():
+    graph.add_node(name, framework.process)
+
+# Add framework selector as the entry point
+graph.set_entry_point("framework_selector")
+
+# Add conditional edges based on configuration
+for edge in graph_config.get("edges", []):
+    from_node = edge.get("from")
+    to_node = edge.get("to")
+    condition = edge.get("condition")
+    
+    if condition:
+        # Add conditional edge
+        graph.add_conditional_edges(
+            from_node,
+            lambda state, condition=condition: eval(condition),
+            {
+                True: to_node,
+                False: END
+            }
+        )
 ```
 
-This architecture allows IronBox to intelligently select the most appropriate framework for each query, providing a flexible and powerful system for handling a wide range of user requests.
+This graph-based architecture allows IronBox to intelligently select the most appropriate framework for each query and route it accordingly, providing a flexible and powerful system for handling a wide range of user requests.
 
 ## Related Files
 
-- `ironbox/core/agent_core.py`: Contains the `AgentCore` class with the `process_query` method
-- `ironbox/core/agent_framework.py`: Contains the `FrameworkSelector` class and framework implementations
-- `ironbox/docs/framework_selection.puml`: UML diagram showing the framework selection logic
+- `ironbox/core/agent_core.py`: Contains the `AgentCore` class that initializes the system
+- `ironbox/core/framework_selector.py`: Contains the `FrameworkSelector` class
+- `ironbox/core/langchain_frameworks.py`: Contains LangChain-based framework implementations
+- `ironbox/docs/langchain_langgraph_architecture.md`: Detailed architecture documentation

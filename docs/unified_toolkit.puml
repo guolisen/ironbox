@@ -1,23 +1,33 @@
 @startuml Unified Toolkit Architecture
 
 ' Define the components
-package "Agent Core" as AgentCore {
-  component "Framework Selector" as FrameworkSelector
-  component "Framework Registry" as FrameworkRegistry
-  component "Query Processor" as QueryProcessor
-}
-
 package "Unified Toolkit" as UnifiedToolkit {
-  component "Tool Registry" as ToolRegistry
-  component "Agent Registry" as AgentRegistry
-  component "Agent-as-Tool Wrappers" as AgentWrappers
-  component "Configuration Manager" as ConfigManager
-  component "Auto-Discovery" as AutoDiscovery
+  class Toolkit {
+    + tools: Dict
+    + agents: Dict
+    + agent_tools: Dict
+    + local_tools: Dict
+    + mcp_tools: Dict
+    + initialize()
+    + register_tool()
+    + register_agent()
+    + get_tool()
+    + get_agent()
+    + list_tools()
+    + list_agents()
+    + list_tool_descriptions()
+    - _load_from_config()
+    - _auto_discover()
+    - _discover_tools()
+    - _discover_agents()
+    - _create_agent_tool_wrapper()
+  }
   
   component "Local Tools" as LocalTools {
-    component "Kubernetes Tools" as K8sTools
-    component "Utility Tools" as UtilityTools
-    component "Problem-Solving Tools" as ProblemTools
+    component "get_pod_count" as PodCount
+    component "get_node_status" as NodeStatus
+    component "restart_pod" as RestartPod
+    component "scale_deployment" as ScaleDeployment
   }
   
   component "MCP Tools" as MCPTools {
@@ -25,7 +35,195 @@ package "Unified Toolkit" as UnifiedToolkit {
     component "MCP Client" as MCPClient
   }
   
-  component "Specialized Agents" as SpecializedAgents {
+  component "Agent Tools" as AgentTools {
+    component "Agent Tool Wrappers" as AgentWrappers
+    component "Specialized Agents" as SpecializedAgents
+  }
+  
+  component "Configuration" as Config
+  component "Auto-Discovery" as Discovery
+}
+
+class AgentCore {
+  + toolkit: Toolkit
+  + llm
+  + framework_registry
+  + framework_selector
+  + initialize()
+  + register_tool()
+  + register_agent()
+  + register_framework()
+  + process_query()
+  + register_mcp_tools()
+  - _create_mcp_tool_wrapper()
+  - _process_direct()
+  - _extract_response()
+}
+
+component "React Framework" as ReactFramework
+component "Plan Framework" as PlanFramework
+component "Route Framework" as RouteFramework
+component "MCP Servers" as MCPServers
+
+' Define relationships
+AgentCore *-- Toolkit : contains
+Toolkit *-- LocalTools : manages
+Toolkit *-- MCPTools : manages
+Toolkit *-- AgentTools : manages
+Toolkit ..> Config : loads from
+Toolkit ..> Discovery : uses
+
+ReactFramework --> Toolkit : uses tools
+PlanFramework --> Toolkit : uses tools
+RouteFramework --> SpecializedAgents : uses directly
+RouteFramework --> Toolkit : can also use
+
+MCPWrappers --> MCPClient : calls
+MCPClient --> MCPServers : invokes
+AgentWrappers --> SpecializedAgents : wraps
+
+' Add notes
+note right of LocalTools
+  Local tools are defined as Python functions
+  within the application and registered
+  with the unified toolkit
+end note
+
+note right of MCPTools
+  MCP tools are provided by external MCP servers
+  and accessed through the MCP client with
+  wrapper functions
+end note
+
+note right of AgentTools
+  Agent tools are specialized agents wrapped
+  as tools, allowing React and Plan frameworks
+  to use agents as tools
+end note
+
+note right of Config
+  Tools and agents can be configured through
+  YAML configuration files, allowing for
+  flexible and dynamic setup
+end note
+
+note right of Discovery
+  Auto-discovery mechanism can find and register
+  tools and agents automatically based on
+  conventions and patterns
+end note
+
+' Add sequence diagram for tool invocation
+newpage Tool Invocation Flow
+
+actor "Framework" as Framework
+participant "Unified Toolkit" as Toolkit
+participant "Tool Function" as Tool
+participant "Agent Wrapper" as AgentWrapper
+participant "Specialized Agent" as Agent
+participant "MCP Client" as Client
+participant "MCP Server" as Server
+
+' Local tool invocation
+Framework -> Toolkit : Look up tool "get_pod_count"
+Toolkit --> Framework : Return function reference
+Framework -> Tool : Call with arguments
+Tool -> Tool : Execute implementation
+Tool --> Framework : Return result
+
+' Agent tool invocation
+Framework -> Toolkit : Look up tool "agent_cluster_health"
+Toolkit --> Framework : Return agent wrapper function
+Framework -> AgentWrapper : Call with arguments
+AgentWrapper -> Agent : Create minimal state and call
+Agent -> Agent : Process state
+Agent --> AgentWrapper : Return updated state
+AgentWrapper --> Framework : Extract and return response
+
+' MCP tool invocation
+Framework -> Toolkit : Look up tool "mcp_weather_get_current_weather"
+Toolkit --> Framework : Return wrapper function
+Framework -> Client : Call wrapper with arguments
+Client -> Server : Send JSON-RPC request
+Server -> Server : Process request
+Server --> Client : Return JSON-RPC response
+Client --> Framework : Return parsed result
+
+' Add class diagram for Toolkit
+newpage Toolkit Class Structure
+
+class Toolkit {
+  + tools: Dict[str, Callable]
+  + agents: Dict[str, Callable]
+  + agent_tools: Dict[str, Callable]
+  + local_tools: Dict[str, Callable]
+  + mcp_tools: Dict[str, Callable]
+  + config: Dict[str, Any]
+  
+  + initialize()
+  + register_tool(tool_name: str, tool_func: Callable, tool_type: str)
+  + register_agent(agent_type: str, agent: Callable)
+  + get_tool(tool_name: str) -> Optional[Callable]
+  + get_agent(agent_type: str) -> Optional[Callable]
+  + list_tools() -> Dict[str, Callable]
+  + list_agents() -> Dict[str, Callable]
+  + list_tool_descriptions() -> str
+  
+  - _load_from_config()
+  - _auto_discover()
+  - _discover_tools(package_path: str)
+  - _discover_agents(package_path: str)
+  - _create_agent_tool_wrapper(agent_type: str, agent: Callable) -> Callable
+}
+
+class AgentCore {
+  + toolkit: Toolkit
+  + llm: Any
+  + framework_registry: FrameworkRegistry
+  + framework_selector: FrameworkSelector
+  + config: Dict[str, Any]
+  + mcp_tools_initialized: bool
+  
+  + initialize()
+  + register_framework(framework_type: str, framework: BaseLCAgentFramework)
+  + register_tool(tool_name: str, tool_func: Callable, tool_type: str)
+  + register_agent(agent_type: str, agent: Callable)
+  + setup_route_framework()
+  + setup_react_framework()
+  + setup_plan_framework()
+  + process_query(query: str, session_id: Optional[str], chat_history: Optional[List[Dict[str, str]]]) -> Dict[str, Any]
+  + register_mcp_tools()
+  
+  - _create_mcp_tool_wrapper(server_name: str, tool_name: str, description: Optional[str]) -> Callable
+  - _process_direct(state: AgentState) -> AgentState
+  - _extract_response(state: AgentState) -> str
+}
+
+AgentCore *-- Toolkit : contains
+
+' Add component diagram for integration
+newpage System Integration
+
+component "IronBox System" as IronBoxSystem {
+  component "Agent Core" as AgentCore
+  component "Unified Toolkit" as Toolkit
+  component "Framework Registry" as FrameworkRegistry
+  component "Framework Selector" as FrameworkSelector
+  component "LLM Provider" as LLMProvider
+  
+  component "Agent Frameworks" as AgentFrameworks {
+    component "Route Framework" as RouteFramework
+    component "React Framework" as ReactFramework
+    component "Plan Framework" as PlanFramework
+  }
+  
+  component "Tools" as Tools {
+    component "Local Tools" as LocalTools
+    component "MCP Tools" as MCPTools
+    component "Agent Tools" as AgentTools
+  }
+  
+  component "Agents" as Agents {
     component "Cluster Register Agent" as ClusterRegisterAgent
     component "Cluster Info Agent" as ClusterInfoAgent
     component "Cluster Health Agent" as ClusterHealthAgent
@@ -33,130 +231,29 @@ package "Unified Toolkit" as UnifiedToolkit {
     component "MCP Agent" as MCPAgent
     component "LLM Agent" as LLMAgent
   }
+  
+  component "External Systems" as ExternalSystems {
+    component "MCP Servers" as MCPServers
+    component "Kubernetes Clusters" as KubernetesClusters
+  }
 }
 
-package "Agent Frameworks" as AgentFrameworks {
-  component "Route Agent Framework" as RouteFramework
-  component "React Agent Framework" as ReactFramework
-  component "Plan Agent Framework" as PlanFramework
-  component "Direct LLM Response" as DirectLLM
-}
+AgentCore *-- Toolkit
+AgentCore *-- FrameworkRegistry
+AgentCore *-- FrameworkSelector
+AgentCore --> LLMProvider : uses
 
-component "External Systems" as ExternalSystems {
-  component "MCP Servers" as MCPServers
-  component "Kubernetes Clusters" as K8sClusters
-  component "LLM Services" as LLMServices
-  component "Database" as Database
-}
+FrameworkRegistry *-- AgentFrameworks
+FrameworkSelector --> AgentFrameworks : selects
 
-' Define relationships
-AgentCore -down-> UnifiedToolkit : manages
-AgentCore -right-> AgentFrameworks : creates & manages
-FrameworkSelector -down-> AgentFrameworks : selects
+Toolkit *-- Tools
+Toolkit *-- Agents
 
-ToolRegistry -down-> LocalTools : contains
-ToolRegistry -down-> MCPTools : contains
-ToolRegistry -down-> AgentWrappers : contains
-AgentRegistry -down-> SpecializedAgents : contains
-AgentWrappers -right-> SpecializedAgents : wraps
+MCPTools --> MCPServers : connects to
+LocalTools --> KubernetesClusters : interacts with
 
-ConfigManager -down-> ToolRegistry : configures
-ConfigManager -down-> AgentRegistry : configures
-AutoDiscovery -down-> ToolRegistry : discovers
-AutoDiscovery -down-> AgentRegistry : discovers
-
-RouteFramework -down-> SpecializedAgents : uses directly
-RouteFramework -down-> ToolRegistry : can use
-ReactFramework -down-> ToolRegistry : uses
-PlanFramework -down-> ToolRegistry : uses
-DirectLLM -down-> LLMServices : uses
-
-MCPClient -down-> MCPServers : connects to
-ClusterRegisterAgent -down-> K8sClusters : manages
-ClusterInfoAgent -down-> K8sClusters : queries
-ClusterHealthAgent -down-> K8sClusters : monitors
-MemoryAgent -down-> Database : accesses
-
-' Add notes
-note right of UnifiedToolkit
-  The Unified Toolkit provides a central
-  repository for all tools and agents,
-  allowing any framework to access them
-  through a consistent interface.
-end note
-
-note right of AgentWrappers
-  Agent-as-Tool Wrappers expose specialized
-  agents as tools, allowing React and Plan
-  frameworks to use them just like regular tools.
-end note
-
-note right of ConfigManager
-  Configuration Manager loads tool and agent
-  definitions from YAML configuration files,
-  making the system more flexible and extensible.
-end note
-
-note right of AutoDiscovery
-  Auto-Discovery mechanism can find and register
-  tools and agents automatically based on
-  conventions and patterns, without requiring
-  manual registration.
-end note
-
-' Add sequence diagram for toolkit initialization
-newpage Toolkit Initialization Flow
-
-actor "API Server" as API
-participant "Agent Core" as Core
-participant "Toolkit" as Toolkit
-participant "Config Manager" as Config
-participant "Auto-Discovery" as Discovery
-participant "Tool Registry" as Tools
-participant "Agent Registry" as Agents
-
-API -> Core : initialize()
-Core -> Toolkit : initialize()
-Toolkit -> Config : load_from_config()
-Config --> Toolkit : return tools & agents
-Toolkit -> Tools : register_tool()
-Toolkit -> Agents : register_agent()
-Toolkit -> Discovery : auto_discover()
-Discovery -> Tools : register_discovered_tools()
-Discovery -> Agents : register_discovered_agents()
-Toolkit -> Core : register_mcp_tools()
-Core -> MCPClient : initialize()
-MCPClient -> MCPServers : list_servers()
-MCPServers --> MCPClient : return servers
-MCPClient -> MCPServers : list_tools()
-MCPServers --> MCPClient : return tools
-Core -> Tools : register_mcp_tool()
-Core -> Toolkit : setup_frameworks()
-Toolkit --> Core : initialization complete
-Core --> API : initialization complete
-
-' Add sequence diagram for query processing
-newpage Query Processing Flow
-
-actor "User" as User
-participant "API Server" as API
-participant "Agent Core" as Core
-participant "Framework Selector" as Selector
-participant "Framework" as Framework
-participant "Toolkit" as Toolkit
-participant "Tool/Agent" as Tool
-
-User -> API : submit query
-API -> Core : process_query()
-Core -> Selector : select_framework()
-Selector --> Core : return framework type
-Core -> Framework : process()
-Framework -> Toolkit : get_tool()
-Toolkit --> Framework : return tool function
-Framework -> Tool : execute()
-Tool --> Framework : return result
-Framework --> Core : return response
-Core --> API : return response
-API --> User : return response
+RouteFramework --> Agents : uses
+ReactFramework --> Tools : uses
+PlanFramework --> Tools : uses
 
 @enduml

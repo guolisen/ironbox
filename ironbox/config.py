@@ -66,6 +66,73 @@ DEFAULT_CONFIG = {
             }
         }
     },
+    "agent_frameworks": [
+        {
+            "name": "route_framework",
+            "type": "route",
+            "enabled": True,
+            "config": {
+                "system_prompt": """
+                You are a router agent for the IronBox system. Your job is to analyze the user's request and determine which specialized agent should handle it.
+                
+                Available agents:
+                {agent_descriptions}
+                
+                Respond with the name of the agent that should handle the request.
+                """
+            }
+        },
+        {
+            "name": "react_framework",
+            "type": "react",
+            "enabled": True,
+            "config": {
+                "system_prompt": """
+                You are a React agent for the IronBox system. You solve problems by thinking step-by-step and taking actions.
+                """,
+                "max_iterations": 10
+            }
+        },
+        {
+            "name": "plan_framework",
+            "type": "plan",
+            "enabled": True,
+            "config": {
+                "planning_prompt": """
+                You are a planning agent for the IronBox system. Your job is to create a detailed plan to solve the user's problem.
+                
+                Available tools:
+                {tool_descriptions}
+                
+                Create a step-by-step plan to solve the following problem:
+                {problem}
+                
+                Your plan should be detailed and include all the necessary steps to solve the problem.
+                Format your response as a numbered list of steps.
+                """
+            }
+        }
+    ],
+    "graph": {
+        "entry_point": "framework_selector",
+        "edges": [
+            {
+                "from": "framework_selector",
+                "to": "route_framework",
+                "condition": "state.agent_outputs.get('framework_selector', {}).get('framework_type') == 'route'"
+            },
+            {
+                "from": "framework_selector",
+                "to": "react_framework",
+                "condition": "state.agent_outputs.get('framework_selector', {}).get('framework_type') == 'react'"
+            },
+            {
+                "from": "framework_selector",
+                "to": "plan_framework",
+                "condition": "state.agent_outputs.get('framework_selector', {}).get('framework_type') == 'plan'"
+            }
+        ]
+    },
 }
 
 

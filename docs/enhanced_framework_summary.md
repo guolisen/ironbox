@@ -1,211 +1,206 @@
-# Enhanced Core Framework Summary
+# LangChain and LangGraph Enhanced Framework
 
-This document provides a summary of the enhancements made to the IronBox core framework to enable React Agent, Plan Agent, and Route Agent to invoke specific agents and tools simultaneously.
+This document provides a summary of the enhanced agent framework implementation that uses LangChain components and LangGraph for orchestration.
 
 ## Overview
 
-The enhanced architecture introduces a **Unified Toolkit** that serves as a central repository for all tools and agents in the system. This allows all frameworks to access both tools and agents through a consistent interface, providing greater flexibility and power.
+The enhanced architecture introduces a sophisticated agent framework system built on LangChain and LangGraph where:
+
+1. Agent frameworks are implemented using LangChain components
+2. High-level orchestration is handled by LangGraph
+3. All components are deployable via configuration files
+
+This integration provides greater flexibility, modularity, and extensibility while leveraging the power of established libraries.
 
 ## Key Components
 
-### 1. Unified Toolkit (`ironbox/ironbox/core/toolkit.py`)
+### 1. LangChain-Based Frameworks
 
-The Toolkit class serves as a central repository for all tools and agents:
-
-```python
-class Toolkit:
-    """Unified toolkit for managing tools and agents."""
-    
-    def __init__(self, config=None):
-        self.config = config or {}
-        self.tools = {}  # All tools (including agent-wrapped tools)
-        self.agents = {}  # Original agent instances
-        self.agent_tools = {}  # Agent instances wrapped as tools
-        self.local_tools = {}  # Local tool functions
-        self.mcp_tools = {}  # MCP tool functions
-```
-
-Key features:
-- Maintains separate collections for different types of tools and agents
-- Provides methods for registering and retrieving tools and agents
-- Supports configuration-based loading of tools and agents
-- Implements auto-discovery of tools and agents
-
-### 2. Enhanced Agent Core (`ironbox/ironbox/core/agent_core.py`)
-
-The AgentCore class has been updated to use the Unified Toolkit:
+The system includes several agent frameworks implemented using LangChain:
 
 ```python
-class AgentCore:
-    def __init__(self, config=None, llm=None):
-        self.config = config or load_config()
-        self.llm = llm or default_llm
-        self.framework_selector = FrameworkSelector(llm=self.llm)
-        self.frameworks = {}
-        self.toolkit = Toolkit(config=self.config)  # Unified toolkit instance
-        self.mcp_tools_initialized = False
+BaseLCAgentFramework          # Base framework class
+├── LCRouteAgentFramework     # Routes to specialized agents
+├── LCReactAgentFramework     # Implements ReAct paradigm
+└── LCPlanAgentFramework      # Creates and executes plans
 ```
 
-Key changes:
-- Uses the Unified Toolkit for managing tools and agents
-- Provides an `initialize()` method for setting up the toolkit and frameworks
-- Sets up frameworks with the appropriate components from the toolkit
-- Registers MCP tools with the toolkit
+These frameworks leverage LangChain's components:
+- `ChatPromptTemplate` for structured prompt creation
+- LangChain's chains and output parsers
+- LangChain's tools system for consistent action interfaces  
+- LangChain's agent executors for reliable execution patterns
 
-### 3. Agent-as-Tool Pattern
+### 2. LangGraph Orchestration
 
-The Agent-as-Tool pattern allows specialized agents to be used as tools:
+LangGraph provides a flexible graph-based orchestration system:
 
 ```python
-def _create_agent_tool_wrapper(self, agent_type: str, agent: Callable):
-    """Create a wrapper that exposes an agent as a tool."""
-    async def agent_tool_wrapper(query: str, **kwargs):
-        # Create a minimal state for the agent
-        state = AgentState(input=query)
-        
-        # Add any additional kwargs to the state
-        for key, value in kwargs.items():
-            setattr(state, key, value)
-        
-        # Call the agent with the state
-        agent_instance = agent()
-        result_state = await agent_instance(state)
-        
-        # Extract and return the response
-        if hasattr(result_state, 'agent_outputs') and agent_type in result_state.agent_outputs:
-            return result_state.agent_outputs[agent_type].get("response", "No response from agent")
-        return "Agent execution completed but no response was generated"
+LangGraphOrchestrator              # Main orchestration class
+├── register_framework()           # Registers frameworks as nodes
+├── build_graph()                  # Builds the StateGraph
+└── invoke()                       # Processes queries through the graph
 ```
 
-This pattern allows React and Plan frameworks to use specialized agents just like regular tools.
+The orchestrator creates a StateGraph with:
+- Framework nodes (route, react, plan)
+- Conditional edges based on configuration
+- Framework selection as the entry point
+- State management across the execution flow
 
-### 4. Configuration-Based Setup
+### 3. Framework Registry
 
-Tools and agents can be configured through YAML configuration files:
+The FrameworkRegistry manages framework types and instances:
+
+```python
+FrameworkRegistry                 # Registry for agent frameworks
+├── register_framework_type()     # Registers a framework type
+├── load_from_config()            # Loads frameworks from configuration
+└── process_query()               # Processes queries through the graph
+```
+
+### 4. Framework Selector
+
+The FrameworkSelector uses LangChain components to determine which framework to use:
+
+```python
+FrameworkSelector                 # Selects appropriate framework
+├── select_framework()            # Determines framework based on query
+└── __call__()                    # Implements node interface for graph
+```
+
+The selector analyzes query characteristics to choose between:
+- Route framework for simple categorizable queries
+- React framework for reasoning and action problems
+- Plan framework for complex multi-step problems
+- Direct LLM for simple informational questions
+
+### 5. Configuration System
+
+The system is fully configurable through YAML:
 
 ```yaml
-# Toolkit settings
-toolkit:
-  # Tool definitions
-  tools:
-    - name: get_pod_count
-      module: ironbox.tools.kubernetes
-      function: get_pod_count
-      description: Get the number of pods in a cluster
-      enabled: true
+agent_frameworks:
+  - name: route_framework
+    type: route
+    enabled: true
+    config:
+      system_prompt: "..."
   
-  # Agent definitions
-  agents:
-    - name: cluster_register
-      class: ironbox.agents.cluster_register.ClusterRegisterAgent
-      enabled: true
-  
-  # Auto-discovery settings
-  discovery:
-    tools:
-      enabled: true
-      paths:
-        - ironbox.tools
-    agents:
-      enabled: true
-      paths:
-        - ironbox.agents
+  - name: react_framework
+    type: react
+    enabled: true
+    config:
+      system_prompt: "..."
+      max_iterations: 10
+
+graph:
+  entry_point: framework_selector
+  edges:
+    - from: framework_selector
+      to: route_framework
+      condition: "state.agent_outputs.get('framework_selector', {}).get('framework_type') == 'route'"
 ```
 
-This makes the system more flexible and extensible, as new tools and agents can be added without modifying the core code.
+## Query Processing Flow
 
-### 5. Auto-Discovery Mechanism
+```mermaid
+sequenceDiagram
+    participant User
+    participant AgentCore
+    participant Registry as FrameworkRegistry
+    participant Selector as FrameworkSelector
+    participant LangGraph
+    participant Frameworks
 
-The toolkit can automatically discover tools and agents:
-
-```python
-def _discover_tools(self, package_path):
-    """Discover tools in the specified package."""
-    # Import the package
-    package = importlib.import_module(package_path)
+    User->>AgentCore: query
+    AgentCore->>Registry: process_query(query)
+    Registry->>LangGraph: invoke(query)
+    LangGraph->>Selector: Select framework
+    Selector-->>LangGraph: framework_type
     
-    # Iterate through all modules in the package
-    for _, module_name, _ in pkgutil.iter_modules([package.__path__[0]]):
-        # Import the module
-        module = importlib.import_module(f"{package_path}.{module_name}")
-        
-        # Find all functions in the module
-        for name, obj in inspect.getmembers(module, inspect.isfunction):
-            # Check if it has a docstring (potential tool)
-            if obj.__doc__ and not name.startswith("_"):
-                # Register the function as a tool
-                self.register_tool(name, obj, "local")
+    alt if route
+        LangGraph->>Frameworks: route_framework.process()
+    else if react
+        LangGraph->>Frameworks: react_framework.process()
+    else if plan
+        LangGraph->>Frameworks: plan_framework.process()
+    end
+    
+    Frameworks-->>LangGraph: updated state
+    LangGraph-->>Registry: result
+    Registry-->>AgentCore: result
+    AgentCore-->>User: response
 ```
 
-This allows the system to be extended with new tools and agents without manual registration.
+## Implementation Details
 
-## Files Modified/Created
+### LangChain Integration
+
+Each framework uses LangChain components:
+
+- **Route Framework**: Uses `ChatPromptTemplate` and chains for routing decisions
+- **React Framework**: Uses LangChain's `create_react_agent` and `AgentExecutor`
+- **Plan Framework**: Implements multi-step planning and execution with LangChain chains
+
+### LangGraph Integration
+
+The system uses LangGraph for orchestration:
+
+- Defines a graph with framework nodes
+- Uses conditional edges for routing
+- Manages state transitions between components
+- Handles error conditions and fallbacks
+
+### Key Files
 
 1. **New Files:**
-   - `ironbox/ironbox/core/toolkit.py` - Unified toolkit implementation
-   - `ironbox/config.yaml.example` - Example configuration file
-   - `ironbox/docs/unified_toolkit_architecture.md` - Documentation of the unified toolkit architecture
-   - `ironbox/docs/unified_toolkit.puml` - UML diagrams of the unified toolkit
+   - `ironbox/ironbox/core/langchain_frameworks.py` - LangChain framework implementations
+   - `ironbox/ironbox/core/framework_selector.py` - Framework selection logic
+   - `ironbox/docs/langchain_langgraph_architecture.md` - Documentation
+   - `ironbox/examples/use_langchain_framework.py` - Example usage
+   - `ironbox/tests/test_langgraph_framework.py` - Tests
 
-2. **Modified Files:**
-   - `ironbox/ironbox/core/agent_core.py` - Updated to use the unified toolkit
-   - `ironbox/ironbox/config.py` - Added toolkit configuration section
-   - `ironbox/docs/tool_repository.puml` - Updated architecture diagram
-   - `ironbox/docs/agent_frameworks.puml` - Updated architecture diagram
-   - `ironbox/notebooks/01_agent_core_and_frameworks.ipynb` - Updated with new examples
-   - `ironbox/docs/enhanced_architecture_qa.md` - Added unified toolkit documentation
-   - `ironbox/tests/test_agent_frameworks.py` - Updated to use configuration-based setup
-   - `ironbox/tests/test_enhanced_architecture.py` - New test file for enhanced architecture
+2. **Updated Files:**
+   - `ironbox/ironbox/core/agent_core.py` - Updated to use LangChain frameworks
+   - `ironbox/ironbox/config.py` - Added framework configuration
+   - `ironbox/config.yaml.example` - Updated with framework configuration
 
 ## Key Benefits
 
-1. **Unified Access**: All frameworks can access both tools and agents through a consistent interface
-2. **Agent-as-Tool Pattern**: Specialized agents can be used as tools by React and Plan frameworks
-3. **Configuration-Driven**: System components can be configured through YAML files
-4. **Auto-Discovery**: Tools and agents can be discovered automatically
-5. **Flexible Orchestration**: Upper frameworks can use lower-level components
-6. **Extensibility**: New specific agents can be easily added
+1. **Modularity**: Frameworks have clear responsibilities and interfaces
+2. **Configurability**: All aspects configurable without code changes
+3. **Extensibility**: New frameworks can be added through configuration 
+4. **Reliability**: Based on established LangChain and LangGraph libraries
+5. **Performance**: Efficient state management and error handling
+6. **Testability**: Easy to test individual components
 
-## Usage Examples
-
-### Using an Agent as a Tool
+## Example Usage
 
 ```python
-# Process a query that would use an agent as a tool
-query = "Use the cluster health agent to check the health of the production cluster"
-result = await agent_core.process_query(query)
-```
-
-The React framework will use the agent-as-tool wrapper to invoke the cluster health agent.
-
-### Configuration-Based Setup
-
-```python
-# Create agent core with configuration
-config = load_config()
+# Initialize agent core
 agent_core = AgentCore(config=config)
-
-# Initialize the agent core
 await agent_core.initialize()
-```
 
-The agent core will load tools and agents from the configuration file.
+# Process query through LangChain and LangGraph
+result = await agent_core.process_query("Help me analyze my cluster health")
+print(result["response"])
+```
 
 ## Testing
 
-You can run the test script to see the enhanced architecture in action:
+Testing can be done using the provided test scripts:
 
 ```bash
-cd ironbox
-python -m tests.test_enhanced_architecture
+pytest ironbox/tests/test_langgraph_framework.py
 ```
 
-This will demonstrate:
-- The unified toolkit with tools and agents
-- Using agents as tools in the React framework
-- Using agents as tools in the Plan framework
-- Configuration-based setup
+These tests validate:
+- Framework registry functionality
+- Framework selection logic
+- Query processing
+- Graph flow
 
 ## Conclusion
 
-The enhanced core framework provides a more flexible and powerful system that can handle a wide range of query types efficiently, using the most appropriate approach for each situation. The unified toolkit allows all frameworks to access both tools and agents, enabling more complex and sophisticated AI actions.
+The enhanced architecture with LangChain and LangGraph provides a flexible, powerful, and configurable system for agent frameworks. It combines the best of established libraries with custom orchestration capabilities, making the system both powerful and maintainable.

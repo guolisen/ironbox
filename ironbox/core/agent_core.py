@@ -9,12 +9,13 @@ from typing import Dict, Any, List, Optional, Tuple, Union, Callable
 
 from ironbox.core.llm import default_llm
 from ironbox.core.graph import AgentState, AgentType
-from ironbox.core.agent_framework import (
-    AgentFramework, 
-    RouteAgentFramework, 
-    ReactAgentFramework, 
-    PlanAgentFramework, 
-    FrameworkSelector
+from ironbox.core.framework_selector import FrameworkSelector
+from ironbox.core.langchain_frameworks import (
+    BaseLCAgentFramework,
+    LCRouteAgentFramework,
+    LCReactAgentFramework,
+    LCPlanAgentFramework,
+    FrameworkRegistry
 )
 from ironbox.core.toolkit import Toolkit
 from ironbox.mcp.client import default_mcp_client
@@ -39,12 +40,16 @@ class AgentCore:
         """
         self.config = config or load_config()
         self.llm = llm or default_llm
-        self.framework_selector = FrameworkSelector(llm=self.llm)
-        self.frameworks = {}
         self.toolkit = Toolkit(config=self.config)  # Unified toolkit for tools and agents
         self.mcp_tools_initialized = False
+        
+        # Create framework registry
+        self.framework_registry = FrameworkRegistry(config=self.config)
+        
+        # Create framework selector
+        self.framework_selector = FrameworkSelector(llm=self.llm, config=self.config)
     
-    def register_framework(self, framework_type: str, framework: AgentFramework):
+    def register_framework(self, framework_type: str, framework: BaseLCAgentFramework):
         """
         Register a framework.
         
@@ -52,8 +57,8 @@ class AgentCore:
             framework_type: Framework type
             framework: Framework instance
         """
-        self.frameworks[framework_type] = framework
-        logger.debug(f"Registered framework: {framework_type}")
+        self.framework_registry.register_framework_type(framework_type, framework.__class__)
+        logger.debug(f"Registered framework type: {framework_type}")
     
     def register_tool(self, tool_name: str, tool_func: Callable, tool_type: str = "local"):
         """
@@ -85,7 +90,7 @@ class AgentCore:
             return
         
         # Create route framework with registered agents
-        route_framework = RouteAgentFramework(llm=self.llm, agents=self.toolkit.agents)
+        route_framework = LCRouteAgentFramework(llm=self.llm, agents=self.toolkit.agents)
         self.register_framework("route", route_framework)
         logger.debug("Set up route framework with agents: %s", list(self.toolkit.agents.keys()))
     
@@ -98,7 +103,7 @@ class AgentCore:
             return
         
         # Create react framework with all tools (including agent-wrapped tools)
-        react_framework = ReactAgentFramework(llm=self.llm, tools=self.toolkit.tools)
+        react_framework = LCReactAgentFramework(llm=self.llm, tools=self.toolkit.tools)
         self.register_framework("react", react_framework)
         logger.debug("Set up react framework with tools: %s", list(self.toolkit.tools.keys()))
     
@@ -111,13 +116,13 @@ class AgentCore:
             return
         
         # Create plan framework with all tools (including agent-wrapped tools)
-        plan_framework = PlanAgentFramework(llm=self.llm, tools=self.toolkit.tools)
+        plan_framework = LCPlanAgentFramework(llm=self.llm, tools=self.toolkit.tools)
         self.register_framework("plan", plan_framework)
         logger.debug("Set up plan framework with tools: %s", list(self.toolkit.tools.keys()))
     
     async def process_query(self, query: str, session_id: Optional[str] = None, chat_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """
-        Process a user query.
+        Process a user query using LangChain and LangGraph.
         
         Args:
             query: User query
@@ -130,42 +135,20 @@ class AgentCore:
         try:
             logger.debug("Processing query: %s", query)
             
-            # Select framework
-            framework_type = await self.framework_selector.select_framework(query)
-            logger.debug("Selected framework: %s", framework_type)
-            
-            # Create initial state
+            # Create initial state with session_id and chat_history
             state = AgentState(
                 input=query,
                 session_id=session_id,
                 chat_history=chat_history or [],
             )
             
-            # Process query with selected framework
-            if framework_type == "direct":
-                # Direct LLM response without using any framework
-                state = await self._process_direct(state)
-            elif framework_type in self.frameworks:
-                # Process with selected framework
-                framework = self.frameworks[framework_type]
-                state = await framework.process(state)
-            else:
-                # Fallback to route framework
-                logger.warning(f"Framework {framework_type} not found, falling back to route")
-                if "route" in self.frameworks:
-                    framework = self.frameworks["route"]
-                    state = await framework.process(state)
-                else:
-                    # Direct LLM response as last resort
-                    state = await self._process_direct(state)
-            
-            # Extract response
-            response = self._extract_response(state)
+            # Process the query using the framework registry and LangGraph
+            result = await self.framework_registry.process_query(query, session_id)
             
             return {
-                "response": response,
-                "framework": framework_type,
-                "state": state,
+                "response": result.get("response", "I couldn't process your request."),
+                "agent_outputs": result.get("agent_outputs", {}),
+                "error": result.get("error")
             }
         except Exception as e:
             logger.error(f"Error processing query: {e}")
@@ -256,18 +239,55 @@ class AgentCore:
 
     async def initialize(self):
         """Initialize the agent core."""
-        # Initialize the toolkit
-        self.toolkit.initialize()
-        
-        # Register MCP tools
-        await self.register_mcp_tools()
-        
-        # Set up frameworks with the unified toolkit
-        self.setup_route_framework()
-        self.setup_react_framework()
-        self.setup_plan_framework()
-        
-        logger.debug("Agent core initialized")
+        try:
+            # Initialize the toolkit
+            self.toolkit.initialize()
+            
+            # Register MCP tools
+            await self.register_mcp_tools()
+            
+            # Register framework selector with the orchestrator
+            self.framework_registry.orchestrator.register_framework(
+                "framework_selector", 
+                self.framework_selector
+            )
+            
+            # Load frameworks from configuration
+            self.framework_registry.load_from_config(self.toolkit, self.llm)
+            
+            # For backward compatibility, register the LangChain frameworks with the old framework system
+            from ironbox.core.langchain_frameworks import (
+                LCRouteAgentFramework,
+                LCReactAgentFramework,
+                LCPlanAgentFramework
+            )
+            
+            # Create and register LangChain frameworks
+            lc_route_framework = LCRouteAgentFramework(
+                llm=self.llm,
+                agents=self.toolkit.agents,
+                config=self.config.get("agent_frameworks", [])[0].get("config", {})
+            )
+            self.register_framework("route", lc_route_framework)
+            
+            lc_react_framework = LCReactAgentFramework(
+                llm=self.llm,
+                tools=self.toolkit.tools,
+                config=self.config.get("agent_frameworks", [])[1].get("config", {})
+            )
+            self.register_framework("react", lc_react_framework)
+            
+            lc_plan_framework = LCPlanAgentFramework(
+                llm=self.llm,
+                tools=self.toolkit.tools,
+                config=self.config.get("agent_frameworks", [])[2].get("config", {})
+            )
+            self.register_framework("plan", lc_plan_framework)
+            
+            logger.debug("Agent core initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing agent core: {e}")
+            raise
     
     async def register_mcp_tools(self):
         """Register MCP tools with the agent core."""
