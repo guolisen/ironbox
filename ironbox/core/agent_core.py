@@ -16,7 +16,9 @@ from ironbox.core.agent_framework import (
     PlanAgentFramework, 
     FrameworkSelector
 )
+from ironbox.core.toolkit import Toolkit
 from ironbox.mcp.client import default_mcp_client
+from ironbox.config import load_config
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -27,18 +29,19 @@ class AgentCore:
     Core agent system that decides which framework to use based on the query type.
     """
     
-    def __init__(self, llm=default_llm):
+    def __init__(self, config=None, llm=None):
         """
         Initialize AgentCore.
         
         Args:
-            llm: LLM instance
+            config: Optional configuration dictionary
+            llm: Optional LLM instance
         """
-        self.llm = llm
-        self.framework_selector = FrameworkSelector(llm=llm)
+        self.config = config or load_config()
+        self.llm = llm or default_llm
+        self.framework_selector = FrameworkSelector(llm=self.llm)
         self.frameworks = {}
-        self.tools = {}  # Repository of both local and MCP tools
-        self.agents = {}
+        self.toolkit = Toolkit(config=self.config)  # Unified toolkit for tools and agents
         self.mcp_tools_initialized = False
     
     def register_framework(self, framework_type: str, framework: AgentFramework):
@@ -52,66 +55,65 @@ class AgentCore:
         self.frameworks[framework_type] = framework
         logger.debug(f"Registered framework: {framework_type}")
     
-    def register_tool(self, tool_name: str, tool_func: Callable):
+    def register_tool(self, tool_name: str, tool_func: Callable, tool_type: str = "local"):
         """
-        Register a tool.
+        Register a tool in the toolkit.
         
         Args:
             tool_name: Tool name
             tool_func: Tool function
+            tool_type: Tool type (local, mcp, agent)
         """
-        self.tools[tool_name] = tool_func
-        logger.debug(f"Registered tool: {tool_name}")
+        self.toolkit.register_tool(tool_name, tool_func, tool_type)
     
     def register_agent(self, agent_type: str, agent: Callable):
         """
-        Register an agent.
+        Register an agent in the toolkit.
         
         Args:
             agent_type: Agent type
             agent: Agent function
         """
-        self.agents[agent_type] = agent
-        logger.debug(f"Registered agent: {agent_type}")
+        self.toolkit.register_agent(agent_type, agent)
     
     def setup_route_framework(self):
         """
         Set up the route framework with registered agents.
         """
-        if not self.agents:
+        if not self.toolkit.agents:
             logger.warning("No agents registered for route framework")
             return
         
         # Create route framework with registered agents
-        route_framework = RouteAgentFramework(llm=self.llm, agents=self.agents)
+        route_framework = RouteAgentFramework(llm=self.llm, agents=self.toolkit.agents)
         self.register_framework("route", route_framework)
-        logger.debug("Set up route framework with agents: %s", list(self.agents.keys()))
+        logger.debug("Set up route framework with agents: %s", list(self.toolkit.agents.keys()))
     
     def setup_react_framework(self):
         """
-        Set up the react framework with registered tools.
+        Set up the react framework with the unified toolkit.
         """
-        if not self.tools:
+        if not self.toolkit.tools:
             logger.warning("No tools registered for react framework")
             return
         
-        # Create react framework with registered tools
-        react_framework = ReactAgentFramework(llm=self.llm, tools=self.tools)
+        # Create react framework with all tools (including agent-wrapped tools)
+        react_framework = ReactAgentFramework(llm=self.llm, tools=self.toolkit.tools)
         self.register_framework("react", react_framework)
-        logger.debug("Set up react framework with tools: %s", list(self.tools.keys()))
+        logger.debug("Set up react framework with tools: %s", list(self.toolkit.tools.keys()))
     
     def setup_plan_framework(self):
         """
-        Set up the plan framework with registered tools.
+        Set up the plan framework with the unified toolkit.
         """
-        if not self.tools:
+        if not self.toolkit.tools:
             logger.warning("No tools registered for plan framework")
             return
         
-        # Create plan framework with registered tools
-        plan_framework = PlanAgentFramework(llm=self.llm, tools=self.tools)
+        # Create plan framework with all tools (including agent-wrapped tools)
+        plan_framework = PlanAgentFramework(llm=self.llm, tools=self.toolkit.tools)
         self.register_framework("plan", plan_framework)
-        logger.debug("Set up plan framework with tools: %s", list(self.tools.keys()))
+        logger.debug("Set up plan framework with tools: %s", list(self.toolkit.tools.keys()))
     
     async def process_query(self, query: str, session_id: Optional[str] = None, chat_history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """
@@ -252,25 +254,20 @@ class AgentCore:
         # Fallback
         return "I couldn't process your request."
 
-
-    async def initialize_tools(self):
-        """Initialize all tools (both local and MCP)."""
-        # Register local tools
-        self.register_local_tools()
+    async def initialize(self):
+        """Initialize the agent core."""
+        # Initialize the toolkit
+        self.toolkit.initialize()
         
         # Register MCP tools
         await self.register_mcp_tools()
         
-        # Set up frameworks with all registered tools
+        # Set up frameworks with the unified toolkit
+        self.setup_route_framework()
         self.setup_react_framework()
         self.setup_plan_framework()
         
-        logger.debug("Initialized all tools and frameworks")
-    
-    def register_local_tools(self):
-        """Register local tools with the agent core."""
-        # This method can be overridden or extended to register specific local tools
-        logger.debug("Registered local tools")
+        logger.debug("Agent core initialized")
     
     async def register_mcp_tools(self):
         """Register MCP tools with the agent core."""
@@ -303,7 +300,7 @@ class AgentCore:
                     
                     # Register the wrapper
                     registered_name = f"mcp_{server_name}_{tool_name}"
-                    self.register_tool(registered_name, tool_wrapper)
+                    self.register_tool(registered_name, tool_wrapper, "mcp")
             
             self.mcp_tools_initialized = True
             logger.debug(f"Registered MCP tools from {len(servers)} servers")
@@ -343,10 +340,10 @@ class AgentCore:
 # Create default agent core
 default_agent_core = AgentCore()
 
-# Initialize tools asynchronously
+# Initialize agent core asynchronously
 async def initialize_default_agent_core():
     """Initialize the default agent core."""
-    await default_agent_core.initialize_tools()
+    await default_agent_core.initialize()
 
 # Run initialization in background if needed
 # This can be called from the API server startup

@@ -52,6 +52,20 @@ DEFAULT_CONFIG = {
     "kubernetes": {
         "default_timeout": 30,
     },
+    "toolkit": {
+        "tools": [],  # Will be populated from config file or auto-discovery
+        "agents": [],  # Will be populated from config file or auto-discovery
+        "discovery": {
+            "tools": {
+                "enabled": True,
+                "paths": ["ironbox.tools"]
+            },
+            "agents": {
+                "enabled": True,
+                "paths": ["ironbox.agents"]
+            }
+        }
+    },
 }
 
 

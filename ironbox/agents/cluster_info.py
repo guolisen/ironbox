@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from langchain.schema import AIMessage
 
 from ironbox.core.graph import AgentState, AgentType
-from ironbox.core.kubernetes_client import KubernetesClient
+from ironbox.util.kubernetes_client import KubernetesClient
 from ironbox.core.llm import default_llm
 from ironbox.db.operations import ClusterOperations
 

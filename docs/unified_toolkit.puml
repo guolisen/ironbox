@@ -1,0 +1,162 @@
+@startuml Unified Toolkit Architecture
+
+' Define the components
+package "Agent Core" as AgentCore {
+  component "Framework Selector" as FrameworkSelector
+  component "Framework Registry" as FrameworkRegistry
+  component "Query Processor" as QueryProcessor
+}
+
+package "Unified Toolkit" as UnifiedToolkit {
+  component "Tool Registry" as ToolRegistry
+  component "Agent Registry" as AgentRegistry
+  component "Agent-as-Tool Wrappers" as AgentWrappers
+  component "Configuration Manager" as ConfigManager
+  component "Auto-Discovery" as AutoDiscovery
+  
+  component "Local Tools" as LocalTools {
+    component "Kubernetes Tools" as K8sTools
+    component "Utility Tools" as UtilityTools
+    component "Problem-Solving Tools" as ProblemTools
+  }
+  
+  component "MCP Tools" as MCPTools {
+    component "MCP Tool Wrappers" as MCPWrappers
+    component "MCP Client" as MCPClient
+  }
+  
+  component "Specialized Agents" as SpecializedAgents {
+    component "Cluster Register Agent" as ClusterRegisterAgent
+    component "Cluster Info Agent" as ClusterInfoAgent
+    component "Cluster Health Agent" as ClusterHealthAgent
+    component "Memory Agent" as MemoryAgent
+    component "MCP Agent" as MCPAgent
+    component "LLM Agent" as LLMAgent
+  }
+}
+
+package "Agent Frameworks" as AgentFrameworks {
+  component "Route Agent Framework" as RouteFramework
+  component "React Agent Framework" as ReactFramework
+  component "Plan Agent Framework" as PlanFramework
+  component "Direct LLM Response" as DirectLLM
+}
+
+component "External Systems" as ExternalSystems {
+  component "MCP Servers" as MCPServers
+  component "Kubernetes Clusters" as K8sClusters
+  component "LLM Services" as LLMServices
+  component "Database" as Database
+}
+
+' Define relationships
+AgentCore -down-> UnifiedToolkit : manages
+AgentCore -right-> AgentFrameworks : creates & manages
+FrameworkSelector -down-> AgentFrameworks : selects
+
+ToolRegistry -down-> LocalTools : contains
+ToolRegistry -down-> MCPTools : contains
+ToolRegistry -down-> AgentWrappers : contains
+AgentRegistry -down-> SpecializedAgents : contains
+AgentWrappers -right-> SpecializedAgents : wraps
+
+ConfigManager -down-> ToolRegistry : configures
+ConfigManager -down-> AgentRegistry : configures
+AutoDiscovery -down-> ToolRegistry : discovers
+AutoDiscovery -down-> AgentRegistry : discovers
+
+RouteFramework -down-> SpecializedAgents : uses directly
+RouteFramework -down-> ToolRegistry : can use
+ReactFramework -down-> ToolRegistry : uses
+PlanFramework -down-> ToolRegistry : uses
+DirectLLM -down-> LLMServices : uses
+
+MCPClient -down-> MCPServers : connects to
+ClusterRegisterAgent -down-> K8sClusters : manages
+ClusterInfoAgent -down-> K8sClusters : queries
+ClusterHealthAgent -down-> K8sClusters : monitors
+MemoryAgent -down-> Database : accesses
+
+' Add notes
+note right of UnifiedToolkit
+  The Unified Toolkit provides a central
+  repository for all tools and agents,
+  allowing any framework to access them
+  through a consistent interface.
+end note
+
+note right of AgentWrappers
+  Agent-as-Tool Wrappers expose specialized
+  agents as tools, allowing React and Plan
+  frameworks to use them just like regular tools.
+end note
+
+note right of ConfigManager
+  Configuration Manager loads tool and agent
+  definitions from YAML configuration files,
+  making the system more flexible and extensible.
+end note
+
+note right of AutoDiscovery
+  Auto-Discovery mechanism can find and register
+  tools and agents automatically based on
+  conventions and patterns, without requiring
+  manual registration.
+end note
+
+' Add sequence diagram for toolkit initialization
+newpage Toolkit Initialization Flow
+
+actor "API Server" as API
+participant "Agent Core" as Core
+participant "Toolkit" as Toolkit
+participant "Config Manager" as Config
+participant "Auto-Discovery" as Discovery
+participant "Tool Registry" as Tools
+participant "Agent Registry" as Agents
+
+API -> Core : initialize()
+Core -> Toolkit : initialize()
+Toolkit -> Config : load_from_config()
+Config --> Toolkit : return tools & agents
+Toolkit -> Tools : register_tool()
+Toolkit -> Agents : register_agent()
+Toolkit -> Discovery : auto_discover()
+Discovery -> Tools : register_discovered_tools()
+Discovery -> Agents : register_discovered_agents()
+Toolkit -> Core : register_mcp_tools()
+Core -> MCPClient : initialize()
+MCPClient -> MCPServers : list_servers()
+MCPServers --> MCPClient : return servers
+MCPClient -> MCPServers : list_tools()
+MCPServers --> MCPClient : return tools
+Core -> Tools : register_mcp_tool()
+Core -> Toolkit : setup_frameworks()
+Toolkit --> Core : initialization complete
+Core --> API : initialization complete
+
+' Add sequence diagram for query processing
+newpage Query Processing Flow
+
+actor "User" as User
+participant "API Server" as API
+participant "Agent Core" as Core
+participant "Framework Selector" as Selector
+participant "Framework" as Framework
+participant "Toolkit" as Toolkit
+participant "Tool/Agent" as Tool
+
+User -> API : submit query
+API -> Core : process_query()
+Core -> Selector : select_framework()
+Selector --> Core : return framework type
+Core -> Framework : process()
+Framework -> Toolkit : get_tool()
+Toolkit --> Framework : return tool function
+Framework -> Tool : execute()
+Tool --> Framework : return result
+Framework --> Core : return response
+Core --> API : return response
+API --> User : return response
+
+@enduml

@@ -1,0 +1,94 @@
+# IronBox Configuration Example
+
+# LLM settings
+llm:
+  provider: ollama
+  base_url: http://192.168.0.103:11434
+  model: qwen2.5:7b
+  temperature: 0.7
+  max_tokens: 2000
+
+# Database settings
+database:
+  url: sqlite:///data/db/ironbox.db
+  echo: false
+
+# API settings
+api:
+  host: 0.0.0.0
+  port: 8000
+  debug: false
+
+# UI settings
+ui:
+  port: 8501
+
+# MCP settings
+mcp:
+  enabled: true
+  servers:
+    weather:
+      enabled: true
+
+# Kubernetes settings
+kubernetes:
+  default_timeout: 30
+
+# Toolkit settings
+toolkit:
+  # Tool definitions
+  tools:
+    - name: get_pod_count
+      module: ironbox.tools.kubernetes
+      function: get_pod_count
+      description: Get the number of pods in a cluster
+      enabled: true
+    
+    - name: get_node_status
+      module: ironbox.tools.kubernetes
+      function: get_node_status
+      description: Get the status of nodes in a cluster
+      enabled: true
+    
+    - name: restart_pod
+      module: ironbox.tools.kubernetes
+      function: restart_pod
+      description: Restart a pod in a cluster
+      enabled: true
+  
+  # Agent definitions
+  agents:
+    - name: cluster_register
+      class: ironbox.agents.cluster_register.ClusterRegisterAgent
+      enabled: true
+    
+    - name: cluster_info
+      class: ironbox.agents.cluster_info.ClusterInfoAgent
+      enabled: true
+    
+    - name: cluster_health
+      class: ironbox.agents.cluster_health.ClusterHealthAgent
+      enabled: true
+    
+    - name: memory
+      class: ironbox.agents.memory_agent.MemoryAgent
+      enabled: true
+    
+    - name: mcp
+      class: ironbox.agents.mcp_agent.MCPAgent
+      enabled: true
+    
+    - name: llm
+      class: ironbox.agents.llm_agent.LLMAgent
+      enabled: true
+  
+  # Auto-discovery settings
+  discovery:
+    tools:
+      enabled: true
+      paths:
+        - ironbox.tools
+    agents:
+      enabled: true
+      paths:
+        - ironbox.agents

@@ -1,4 +1,4 @@
-@startuml Agent Frameworks
+@startuml Enhanced Agent Frameworks
 
 ' Define the components
 package "Agent Frameworks" {
@@ -38,9 +38,22 @@ package "Agent Frameworks" {
   component "Direct LLM Response" as DirectLLM
 }
 
+' Unified Toolkit
+component "Unified Toolkit" as Toolkit {
+  component "Local Tools" as LocalTools
+  component "MCP Tools" as MCPTools
+  component "Agent-as-Tools" as AgentTools
+  component "Configuration" as Config
+  component "Auto-Discovery" as Discovery
+}
+
+' Agent Core
+component "Agent Core" as AgentCore
+
 ' Define relationships for Route Framework
 RouterAgent -down-> SpecializedAgents : Route to
 SpecializedAgents -right-> "Response" : Generate
+RouteFramework -down-> Toolkit : Can also use
 
 ' Define relationships for React Framework
 ReactProcess -down-> Thought : Generate
@@ -49,12 +62,24 @@ Action -down-> ToolExecution : Execute
 ToolExecution -down-> Observation : Observe
 Observation -up-> ReactProcess : Loop back
 Observation -right-> ReactFinalAnswer : When solved
+ReactFramework -down-> Toolkit : Use
 
 ' Define relationships for Plan Framework
 PlanningPhase -down-> Plan : Create
 Plan -down-> ExecutionPhase : Execute
 ExecutionPhase -down-> StepExecution : Step by step
 StepExecution -right-> PlanFinalResponse : Generate
+PlanFramework -down-> Toolkit : Use
+
+' Define relationships for Agent Core
+AgentCore -down-> Toolkit : Manages
+AgentCore -right-> RouteFramework : Creates
+AgentCore -right-> ReactFramework : Creates
+AgentCore -right-> PlanFramework : Creates
+AgentCore -right-> DirectLLM : Creates
+
+' Define relationships for Toolkit
+AgentTools -right-> SpecializedAgents : Wraps
 
 ' Add notes
 note right of RouterAgent
@@ -77,6 +102,17 @@ end note
 note right of DirectLLM
   Bypasses frameworks and agents
   for simple informational queries
+end note
+
+note right of Toolkit
+  Unified repository for all tools and agents
+  that can be accessed by any framework
+end note
+
+note right of AgentTools
+  Specialized agents wrapped as tools,
+  allowing React and Plan frameworks
+  to use agents as tools
 end note
 
 @enduml

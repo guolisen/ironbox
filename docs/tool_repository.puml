@@ -1,7 +1,7 @@
-@startuml Tool Repository Integration
+@startuml Unified Toolkit Integration
 
 ' Define the components
-package "Tool Repository" {
+package "Unified Toolkit" {
   component "Local Tools" as LocalTools {
     component "get_pod_count" as PodCount
     component "get_node_status" as NodeStatus
@@ -14,28 +14,39 @@ package "Tool Repository" {
     component "MCP Tool Wrappers" as MCPWrappers
     component "MCP Client" as MCPClient
   }
+  
+  component "Agent Tools" as AgentTools {
+    component "Agent Tool Wrappers" as AgentWrappers
+    component "Specialized Agents" as SpecializedAgents
+  }
+  
+  component "Configuration" as Config
+  component "Auto-Discovery" as Discovery
 }
 
 component "Agent Core" as AgentCore
 component "React Framework" as ReactFramework
 component "Plan Framework" as PlanFramework
+component "Route Framework" as RouteFramework
 component "MCP Servers" as MCPServers
 
 ' Define relationships
-AgentCore -down-> LocalTools : Register
-AgentCore -down-> MCPTools : Register
-ReactFramework -right-> LocalTools : Use
-ReactFramework -right-> MCPTools : Use
-PlanFramework -right-> LocalTools : Use
-PlanFramework -right-> MCPTools : Use
+AgentCore -down-> "Unified Toolkit" : Manages
+ReactFramework -right-> "Unified Toolkit" : Use
+PlanFramework -right-> "Unified Toolkit" : Use
+RouteFramework -right-> SpecializedAgents : Use Directly
+RouteFramework -right-> "Unified Toolkit" : Can Also Use
 MCPWrappers -down-> MCPClient : Call
 MCPClient -down-> MCPServers : Invoke
+AgentWrappers -down-> SpecializedAgents : Wrap
+Config -right-> "Unified Toolkit" : Configure
+Discovery -right-> "Unified Toolkit" : Discover
 
 ' Add notes
 note right of LocalTools
   Local tools are defined as Python functions
   within the application and registered
-  directly with the agent core
+  with the unified toolkit
 end note
 
 note right of MCPTools
@@ -44,31 +55,54 @@ note right of MCPTools
   wrapper functions
 end note
 
-note right of AgentCore
-  The Agent Core manages tool registration
-  and provides a unified interface for
-  accessing both local and MCP tools
+note right of AgentTools
+  Agent tools are specialized agents wrapped
+  as tools, allowing React and Plan frameworks
+  to use agents as tools
+end note
+
+note right of Config
+  Tools and agents can be configured through
+  YAML configuration files, allowing for
+  flexible and dynamic setup
+end note
+
+note right of Discovery
+  Auto-discovery mechanism can find and register
+  tools and agents automatically based on
+  conventions and patterns
 end note
 
 ' Add sequence diagram for tool invocation
 newpage Tool Invocation Flow
 
 actor "Framework" as Framework
-participant "Tool Repository" as ToolRepo
+participant "Unified Toolkit" as Toolkit
 participant "Tool Function" as Tool
+participant "Agent Wrapper" as AgentWrapper
+participant "Specialized Agent" as Agent
 participant "MCP Client" as Client
 participant "MCP Server" as Server
 
 ' Local tool invocation
-Framework -> ToolRepo : Look up tool "get_pod_count"
-ToolRepo --> Framework : Return function reference
+Framework -> Toolkit : Look up tool "get_pod_count"
+Toolkit --> Framework : Return function reference
 Framework -> Tool : Call with arguments
 Tool -> Tool : Execute implementation
 Tool --> Framework : Return result
 
+' Agent tool invocation
+Framework -> Toolkit : Look up tool "agent_cluster_health"
+Toolkit --> Framework : Return agent wrapper function
+Framework -> AgentWrapper : Call with arguments
+AgentWrapper -> Agent : Create minimal state and call
+Agent -> Agent : Process state
+Agent --> AgentWrapper : Return updated state
+AgentWrapper --> Framework : Extract and return response
+
 ' MCP tool invocation
-Framework -> ToolRepo : Look up tool "mcp_weather_get_current_weather"
-ToolRepo --> Framework : Return wrapper function
+Framework -> Toolkit : Look up tool "mcp_weather_get_current_weather"
+Toolkit --> Framework : Return wrapper function
 Framework -> Client : Call wrapper with arguments
 Client -> Server : Send JSON-RPC request
 Server -> Server : Process request

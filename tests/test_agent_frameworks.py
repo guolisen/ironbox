@@ -20,11 +20,11 @@ from ironbox.agents.cluster_health import ClusterHealthAgent
 from ironbox.agents.memory_agent import MemoryAgent
 from ironbox.agents.mcp_agent import MCPAgent
 from ironbox.agents.llm_agent import LLMAgent
+from ironbox.config import load_config
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
 
 # Sample tools for React and Plan frameworks
 async def get_pod_count(cluster_name: str) -> str:
@@ -62,29 +62,93 @@ async def scale_deployment(cluster_name: str, deployment_name: str, replicas: in
     return f"Deployment {deployment_name} in cluster {cluster_name} has been scaled to {replicas} replicas."
 
 
+# Create test configuration with tools and agents
+def create_test_config() -> Dict[str, Any]:
+    """Create a test configuration with tools and agents."""
+    config = load_config()
+    
+    # Add test tools to config
+    config["toolkit"]["tools"] = [
+        {
+            "name": "get_pod_count",
+            "module": "ironbox.tests.test_agent_frameworks",
+            "function": "get_pod_count",
+            "description": "Get the number of pods in a cluster",
+            "enabled": True
+        },
+        {
+            "name": "get_node_status",
+            "module": "ironbox.tests.test_agent_frameworks",
+            "function": "get_node_status",
+            "description": "Get the status of nodes in a cluster",
+            "enabled": True
+        },
+        {
+            "name": "restart_pod",
+            "module": "ironbox.tests.test_agent_frameworks",
+            "function": "restart_pod",
+            "description": "Restart a pod in a cluster",
+            "enabled": True
+        },
+        {
+            "name": "scale_deployment",
+            "module": "ironbox.tests.test_agent_frameworks",
+            "function": "scale_deployment",
+            "description": "Scale a deployment in a cluster",
+            "enabled": True
+        }
+    ]
+    
+    # Add test agents to config
+    config["toolkit"]["agents"] = [
+        {
+            "name": "cluster_register",
+            "class": "ironbox.agents.cluster_register.ClusterRegisterAgent",
+            "enabled": True
+        },
+        {
+            "name": "cluster_info",
+            "class": "ironbox.agents.cluster_info.ClusterInfoAgent",
+            "enabled": True
+        },
+        {
+            "name": "cluster_health",
+            "class": "ironbox.agents.cluster_health.ClusterHealthAgent",
+            "enabled": True
+        },
+        {
+            "name": "memory",
+            "class": "ironbox.agents.memory_agent.MemoryAgent",
+            "enabled": True
+        },
+        {
+            "name": "mcp",
+            "class": "ironbox.agents.mcp_agent.MCPAgent",
+            "enabled": True
+        },
+        {
+            "name": "llm",
+            "class": "ironbox.agents.llm_agent.LLMAgent",
+            "enabled": True
+        }
+    ]
+    
+    # Disable auto-discovery for tests
+    config["toolkit"]["discovery"]["tools"]["enabled"] = False
+    config["toolkit"]["discovery"]["agents"]["enabled"] = False
+    
+    return config
+
+
 # Create agent core
-def create_test_agent_core() -> AgentCore:
+async def create_test_agent_core() -> AgentCore:
     """Create a test agent core with all frameworks."""
-    agent_core = AgentCore()
+    # Create agent core with test config
+    config = create_test_config()
+    agent_core = AgentCore(config=config)
     
-    # Register agents
-    agent_core.register_agent(AgentType.CLUSTER_REGISTER, lambda db_session=None: ClusterRegisterAgent())
-    agent_core.register_agent(AgentType.CLUSTER_INFO, lambda db_session=None: ClusterInfoAgent())
-    agent_core.register_agent(AgentType.CLUSTER_HEALTH, lambda db_session=None: ClusterHealthAgent())
-    agent_core.register_agent(AgentType.MEMORY, lambda db_session=None: MemoryAgent())
-    agent_core.register_agent(AgentType.MCP, lambda db_session=None: MCPAgent())
-    agent_core.register_agent(AgentType.LLM, lambda db_session=None: LLMAgent())
-    
-    # Register tools
-    agent_core.register_tool("get_pod_count", get_pod_count)
-    agent_core.register_tool("get_node_status", get_node_status)
-    agent_core.register_tool("restart_pod", restart_pod)
-    agent_core.register_tool("scale_deployment", scale_deployment)
-    
-    # Set up frameworks
-    agent_core.setup_route_framework()
-    agent_core.setup_react_framework()
-    agent_core.setup_plan_framework()
+    # Initialize the agent core
+    await agent_core.initialize()
     
     return agent_core
 
@@ -93,7 +157,7 @@ async def test_route_framework():
     """Test the route framework."""
     print("\n=== Testing Route Framework ===")
     
-    agent_core = create_test_agent_core()
+    agent_core = await create_test_agent_core()
     
     # Route framework is good for simple queries that fit into predefined categories
     query = "Register a new Kubernetes cluster named production with API server https://k8s.example.com:6443"
@@ -108,7 +172,7 @@ async def test_react_framework():
     """Test the react framework."""
     print("\n=== Testing React Framework ===")
     
-    agent_core = create_test_agent_core()
+    agent_core = await create_test_agent_core()
     
     # React framework is good for problems that require reasoning and action
     query = "Check the pod count in the production cluster and restart any pods that are not running"
@@ -137,7 +201,7 @@ async def test_plan_framework():
     """Test the plan framework."""
     print("\n=== Testing Plan Framework ===")
     
-    agent_core = create_test_agent_core()
+    agent_core = await create_test_agent_core()
     
     # Plan framework is good for complex problems that require planning
     query = "Scale the web deployment in the production cluster to 5 replicas, then check the node status to ensure all nodes are ready"
@@ -166,7 +230,7 @@ async def test_direct_response():
     """Test direct LLM response."""
     print("\n=== Testing Direct Response ===")
     
-    agent_core = create_test_agent_core()
+    agent_core = await create_test_agent_core()
     
     # Direct response is good for simple questions that don't require special handling
     query = "What is Kubernetes?"
@@ -181,7 +245,7 @@ async def test_framework_selection():
     """Test framework selection for different query types."""
     print("\n=== Testing Framework Selection ===")
     
-    agent_core = create_test_agent_core()
+    agent_core = await create_test_agent_core()
     
     # Test different query types
     queries = [
@@ -199,6 +263,44 @@ async def test_framework_selection():
         print(f"Selected Framework: {framework_type}\n")
 
 
+async def test_agent_as_tool():
+    """Test using an agent as a tool."""
+    print("\n=== Testing Agent as Tool ===")
+    
+    agent_core = await create_test_agent_core()
+    
+    # Get the React framework
+    react_framework = agent_core.frameworks.get("react")
+    
+    # Check if we have agent tools
+    agent_tools = [name for name in agent_core.toolkit.tools.keys() if name.startswith("agent_")]
+    print(f"Available agent tools: {agent_tools}")
+    
+    # Test using an agent as a tool
+    if agent_tools and react_framework:
+        # Create a test query that would use an agent tool
+        query = "Use the cluster health agent to check the health of the production cluster"
+        
+        result = await agent_core.process_query(query)
+        print(f"Query: {query}")
+        print(f"Selected Framework: {result['framework']}")
+        print(f"Response: {result['response']}")
+        
+        # Print steps if available
+        if result['framework'] == 'react' and 'state' in result:
+            state = result['state']
+            if 'agent_outputs' in state and 'react' in state.agent_outputs:
+                steps = state.agent_outputs['react'].get('steps', [])
+                if steps:
+                    print("\nSteps:")
+                    for i, step in enumerate(steps):
+                        print(f"Step {i+1}:")
+                        print(f"  Thought: {step['thought']}")
+                        print(f"  Action: {step['action']}")
+                        print(f"  Action Input: {step['action_input']}")
+                        print(f"  Observation: {step['observation']}")
+
+
 async def main():
     """Run all tests."""
     await test_route_framework()
@@ -206,6 +308,7 @@ async def main():
     await test_plan_framework()
     await test_direct_response()
     await test_framework_selection()
+    await test_agent_as_tool()
 
 
 if __name__ == "__main__":

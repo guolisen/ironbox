@@ -56,7 +56,7 @@ Local tools are defined as Python functions within the application and registere
 async def get_pod_count(cluster_name: str) -> str:
     """Get the number of pods in a cluster."""
     # Implementation that interacts with Kubernetes API
-    from ironbox.core.kubernetes_client import KubernetesClient
+    from ironbox.util.kubernetes_client import KubernetesClient
     
     client = KubernetesClient(cluster_name=cluster_name)
     pods = await client.list_pods()
@@ -252,6 +252,236 @@ The implementation consists of several key files:
 3. **Flexibility**: Easy to extend with new tools, agents, and frameworks
 4. **Unified Interface**: Consistent access to both local and external tools
 5. **Automatic Framework Selection**: Intelligent routing based on query type
+6. **Agent-as-Tool Pattern**: Ability to use specialized agents as tools in any framework
+7. **Configuration-Driven Setup**: Tools and agents can be configured through YAML files
+8. **Auto-Discovery**: Automatic discovery of tools and agents based on conventions
+
+## Unified Toolkit Architecture
+
+**Question:**
+> The current architecture has separate tools and agents. Could we have a unified toolkit that allows all frameworks to access both tools and agents?
+
+**Answer:**
+We've implemented a unified toolkit architecture that addresses this requirement:
+
+1. **Toolkit Class**: A central repository for all tools and agents
+2. **Agent-as-Tool Pattern**: Specialized agents are wrapped as tools
+3. **Configuration-Driven**: Tools and agents can be configured through YAML files
+4. **Auto-Discovery**: Automatic discovery of tools and agents based on conventions
+
+### Toolkit Class
+
+The `Toolkit` class serves as a central repository for all tools and agents:
+
+```python
+class Toolkit:
+    """Unified toolkit for managing tools and agents."""
+    
+    def __init__(self, config=None):
+        """Initialize the toolkit."""
+        self.config = config or {}
+        self.tools = {}  # All tools (including agent-wrapped tools)
+        self.agents = {}  # Original agent instances
+        self.agent_tools = {}  # Agent instances wrapped as tools
+        self.local_tools = {}  # Local tool functions
+        self.mcp_tools = {}  # MCP tool functions
+    
+    def register_tool(self, tool_name: str, tool_func: Callable, tool_type: str = "local"):
+        """Register a tool in the toolkit."""
+        self.tools[tool_name] = tool_func
+        
+        # Also store in the appropriate category
+        if tool_type == "local":
+            self.local_tools[tool_name] = tool_func
+        elif tool_type == "mcp":
+            self.mcp_tools[tool_name] = tool_func
+        elif tool_type == "agent":
+            self.agent_tools[tool_name] = tool_func
+    
+    def register_agent(self, agent_type: str, agent: Callable):
+        """Register an agent in the toolkit."""
+        self.agents[agent_type] = agent
+        
+        # Also create and register an agent-as-tool wrapper
+        agent_tool = self._create_agent_tool_wrapper(agent_type, agent)
+        self.register_tool(f"agent_{agent_type}", agent_tool, tool_type="agent")
+```
+
+### Agent-as-Tool Pattern
+
+The Agent-as-Tool pattern allows specialized agents to be used as tools:
+
+```python
+def _create_agent_tool_wrapper(self, agent_type: str, agent: Callable):
+    """Create a wrapper that exposes an agent as a tool."""
+    async def agent_tool_wrapper(query: str, **kwargs):
+        """Tool wrapper for agent."""
+        # Create a minimal state for the agent
+        state = AgentState(input=query)
+        
+        # Add any additional kwargs to the state
+        for key, value in kwargs.items():
+            setattr(state, key, value)
+        
+        # Call the agent with the state
+        agent_instance = agent()
+        result_state = await agent_instance(state)
+        
+        # Extract and return the response
+        if hasattr(result_state, 'agent_outputs') and agent_type in result_state.agent_outputs:
+            return result_state.agent_outputs[agent_type].get("response", "No response from agent")
+        return "Agent execution completed but no response was generated"
+    
+    # Set function name and docstring
+    agent_tool_wrapper.__name__ = f"agent_{agent_type}"
+    agent_tool_wrapper.__doc__ = f"Execute the {agent_type} agent with the given query"
+    
+    return agent_tool_wrapper
+```
+
+### Configuration-Driven Setup
+
+Tools and agents can be configured through YAML configuration files:
+
+```yaml
+# Toolkit settings
+toolkit:
+  # Tool definitions
+  tools:
+    - name: get_pod_count
+      module: ironbox.tools.kubernetes
+      function: get_pod_count
+      description: Get the number of pods in a cluster
+      enabled: true
+  
+  # Agent definitions
+  agents:
+    - name: cluster_register
+      class: ironbox.agents.cluster_register.ClusterRegisterAgent
+      enabled: true
+    
+    - name: cluster_info
+      class: ironbox.agents.cluster_info.ClusterInfoAgent
+      enabled: true
+  
+  # Auto-discovery settings
+  discovery:
+    tools:
+      enabled: true
+      paths:
+        - ironbox.tools
+    agents:
+      enabled: true
+      paths:
+        - ironbox.agents
+```
+
+### Auto-Discovery Mechanism
+
+The toolkit can automatically discover tools and agents:
+
+```python
+def _discover_tools(self, package_path):
+    """Discover tools in the specified package."""
+    # Import the package
+    package = importlib.import_module(package_path)
+    
+    # Iterate through all modules in the package
+    for _, module_name, _ in pkgutil.iter_modules([package.__path__[0]]):
+        # Import the module
+        module = importlib.import_module(f"{package_path}.{module_name}")
+        
+        # Find all functions in the module
+        for name, obj in inspect.getmembers(module, inspect.isfunction):
+            # Check if it has a docstring (potential tool)
+            if obj.__doc__ and not name.startswith("_"):
+                # Register the function as a tool
+                self.register_tool(name, obj, "local")
+```
+
+### Integration with Agent Core
+
+The Agent Core manages the toolkit and provides it to all frameworks:
+
+```python
+class AgentCore:
+    """Core agent system that decides which framework to use based on the query type."""
+    
+    def __init__(self, config=None, llm=None):
+        """Initialize AgentCore."""
+        self.config = config or load_config()
+        self.llm = llm or default_llm
+        self.framework_selector = FrameworkSelector(llm=self.llm)
+        self.frameworks = {}
+        self.toolkit = Toolkit(config=self.config)  # Unified toolkit for tools and agents
+        self.mcp_tools_initialized = False
+    
+    async def initialize(self):
+        """Initialize the agent core."""
+        # Initialize the toolkit
+        self.toolkit.initialize()
+        
+        # Register MCP tools
+        await self.register_mcp_tools()
+        
+        # Set up frameworks with the unified toolkit
+        self.setup_route_framework()
+        self.setup_react_framework()
+        self.setup_plan_framework()
+```
+
+### Framework Access to the Toolkit
+
+All frameworks can access the unified toolkit:
+
+```python
+def setup_route_framework(self):
+    """Set up the route framework with registered agents."""
+    route_framework = RouteAgentFramework(llm=self.llm, agents=self.toolkit.agents)
+    self.register_framework("route", route_framework)
+
+def setup_react_framework(self):
+    """Set up the react framework with the unified toolkit."""
+    react_framework = ReactAgentFramework(llm=self.llm, tools=self.toolkit.tools)
+    self.register_framework("react", react_framework)
+
+def setup_plan_framework(self):
+    """Set up the plan framework with the unified toolkit."""
+    plan_framework = PlanAgentFramework(llm=self.llm, tools=self.toolkit.tools)
+    self.register_framework("plan", plan_framework)
+```
+
+### Toolkit Usage Flow
+
+Here's a sequence diagram showing how the toolkit is used:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant AgentCore
+    participant Framework
+    participant Toolkit
+    participant Tool
+    participant Agent
+    
+    User->>AgentCore: Submit query
+    AgentCore->>Framework: Process query
+    
+    alt Tool Usage
+        Framework->>Toolkit: Get tool
+        Toolkit-->>Framework: Return tool function
+        Framework->>Tool: Execute tool
+        Tool-->>Framework: Return result
+    else Agent Usage via Tool Wrapper
+        Framework->>Toolkit: Get agent tool
+        Toolkit-->>Framework: Return agent wrapper
+        Framework->>Agent: Execute via wrapper
+        Agent-->>Framework: Return result
+    end
+    
+    Framework-->>AgentCore: Return response
+    AgentCore-->>User: Return final response
+```
 
 ## Tool Discovery and Usage
 
