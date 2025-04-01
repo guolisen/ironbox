@@ -55,7 +55,7 @@ class BaseLCAgentFramework(ABC):
         
         for name, func in self.tools.items():
             # Create a LangChain tool from the function
-            @tool(name=name, description=func.__doc__ or f"Call {name}")
+            @tool(name, description=func.__doc__ or f"Call {name}")
             async def dynamic_tool(*args, **kwargs):
                 return await func(*args, **kwargs)
             
@@ -590,42 +590,115 @@ class LangGraphOrchestrator:
         # Create the graph
         graph = StateGraph(AgentState)
         
+        # Log the frameworks we have
+        logger.debug(f"Building graph with frameworks: {list(self.frameworks.keys())}")
+        
         # Add nodes for each framework
         for name, framework in self.frameworks.items():
             graph.add_node(name, framework.process)
+            logger.debug(f"Added node for framework: {name}")
+        
+        # Verify that framework_selector exists
+        if "framework_selector" not in self.frameworks:
+            logger.error("framework_selector not found in registered frameworks!")
+            # We need to handle this case - either by creating a default selector or raising an error
+            raise ValueError("framework_selector must be registered before building the graph")
         
         # Add framework selector as the entry point
         graph.set_entry_point("framework_selector")
+        logger.debug("Set framework_selector as entry point")
+        
+        # Track nodes that already have conditional edges to prevent duplicates
+        nodes_with_conditional_edges = set()
         
         # Define conditional routing based on configuration
         graph_config = self.config.get("graph", {})
         edges = graph_config.get("edges", [])
         
+        # First, add conditional edges from framework_selector to framework types
+        if "framework_selector" in self.frameworks and "framework_selector" not in nodes_with_conditional_edges:
+            # Define a router function that uses the framework_type from agent_outputs
+            def route_to_framework(state: AgentState):
+                # Get the framework_type from agent_outputs
+                if "framework_selector" in state.agent_outputs:
+                    framework_output = state.agent_outputs["framework_selector"]
+                    if isinstance(framework_output, dict) and "framework_type" in framework_output:
+                        framework_type = framework_output["framework_type"]
+                        logger.debug(f"Routing to framework: {framework_type}")
+                        return framework_type
+                logger.debug("No framework_type found in agent_outputs, routing to END")
+                return None
+            
+            # Create a mapping of possible framework types to target nodes
+            framework_routes = {}
+            for name in self.frameworks.keys():
+                if name != "framework_selector":
+                    framework_type = name
+                    framework_routes[framework_type] = name
+            
+            # Add a default route to END
+            framework_routes[None] = END
+            
+            logger.debug(f"Creating routes from framework_selector to: {list(framework_routes.keys())}")
+            
+            # Add the conditional edge with named branches
+            try:
+                graph.add_conditional_edges(
+                    "framework_selector",
+                    route_to_framework,
+                    framework_routes
+                )
+                logger.debug(f"Successfully added conditional edges from framework_selector")
+                
+                # Mark this node as having conditional edges
+                nodes_with_conditional_edges.add("framework_selector")
+            except Exception as e:
+                logger.error(f"Error adding conditional edges from framework_selector: {e}")
+                raise
+        
+        # Then add any additional edges from configuration
         for edge in edges:
             from_node = edge.get("from")
             to_node = edge.get("to")
             condition = edge.get("condition")
             
+            # Skip if the source node already has conditional edges to prevent conflicts
+            if from_node in nodes_with_conditional_edges:
+                logger.warning(f"Skipping edge from {from_node} to {to_node} as {from_node} already has conditional edges")
+                continue
+            
             if from_node and to_node:
                 if condition:
-                    # Add conditional edge
+                    # Add conditional edge with a unique branch name
+                    branch_name = f"{from_node}_to_{to_node}"
+                    condition_func = lambda state, condition=condition: eval(condition)
+                    
+                    # Create a dictionary with branch names as keys
+                    branches = {
+                        True: to_node,
+                        False: END
+                    }
+                    
                     graph.add_conditional_edges(
                         from_node,
-                        lambda state, condition=condition: eval(condition),
-                        {
-                            True: to_node,
-                            False: END
-                        }
+                        condition_func,
+                        branches
                     )
+                    
+                    # Mark this node as having conditional edges
+                    nodes_with_conditional_edges.add(from_node)
+                    logger.debug(f"Added conditional edge from {from_node} to {to_node} with condition")
                 else:
                     # Add direct edge
                     graph.add_edge(from_node, to_node)
+                    logger.debug(f"Added direct edge from {from_node} to {to_node}")
         
         # Add edges from other frameworks to END
         for name in self.frameworks.keys():
-            if name != "framework_selector" and not any(edge.get("from") == name for edge in edges):
+            if name != "framework_selector" and name not in nodes_with_conditional_edges and not any(edge.get("from") == name for edge in edges):
                 # All non-selector frameworks with no explicit edges go directly to END
                 graph.add_edge(name, END)
+                logger.debug(f"Added default edge from {name} to END")
         
         # Compile the graph
         self.graph = graph.compile()

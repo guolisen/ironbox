@@ -1,0 +1,47 @@
+@startuml Agent-as-Tool Wrapping
+
+' Define components
+package "Toolkit" as TK {
+  component "Agent Tools" as AT
+  component "Agent Wrappers" as AW
+}
+
+component "Specialized Agents" as SA {
+  component "Cluster Register Agent" as CRA
+  component "Cluster Info Agent" as CIA
+  component "Cluster Health Agent" as CHA
+  component "Memory Agent" as MA
+  component "MCP Agent" as MCPA
+  component "LLM Agent" as LA
+}
+
+component "React Framework" as ReF
+component "Plan Framework" as PF
+
+' Define relationships
+TK --> AT : Contains
+AT --> AW : Contains
+AW --> SA : Wraps
+ReF --> TK : Uses
+PF --> TK : Uses
+
+' Add notes
+note right of AW
+  Agent wrappers convert specialized agents into tools:
+  1. Take a query and parameters as input
+  2. Create a minimal agent state
+  3. Call the agent with this state
+  4. Extract and return the response
+end note
+
+note right of SA
+  Specialized agents implement a __call__ method
+  that takes and returns an AgentState
+end note
+
+note right of ReF
+  React and Plan frameworks can use
+  agent-wrapped tools just like any other tool
+end note
+
+@enduml

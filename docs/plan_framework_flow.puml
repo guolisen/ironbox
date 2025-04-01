@@ -1,0 +1,38 @@
+@startuml Plan Framework Flow
+
+' Define participants
+participant "Framework Selector" as FS
+participant "Plan Framework" as PF
+participant "Plan Agent" as PA
+participant "Tools" as T
+
+' Define sequence
+FS -> PF : Select plan framework
+PF -> PA : Process query
+PA -> PA : Create plan
+
+loop For each step in plan
+    PA -> T : Execute tool for step
+    T --> PA : Return result
+    PA -> PA : Mark step as completed
+end
+
+PA -> PA : Generate final response
+PA --> PF : Return response
+PF --> FS : Return final response
+
+' Add notes
+note over PA
+  The Plan Agent first creates a detailed plan
+  with specific steps, then executes each step
+  in sequence using appropriate tools
+end note
+
+note over T
+  Tools can be:
+  - Local tools (e.g., get_pod_count)
+  - MCP tools (e.g., weather_get_current)
+  - Agent tools (e.g., agent_cluster_health)
+end note
+
+@enduml

@@ -1,0 +1,52 @@
+@startuml Complete Query Flow
+
+' Define participants
+participant "User" as U
+participant "Agent Core" as AC
+participant "Framework Selector" as FS
+participant "Selected Framework" as F
+participant "Toolkit" as T
+participant "Agents/Tools" as A
+
+' Define sequence
+U -> AC : Submit query
+AC -> FS : Select framework
+FS --> AC : Return framework type
+AC -> F : Process with selected framework
+
+loop Framework Processing
+    F -> T : Look up tool/agent
+    T --> F : Return function reference
+    F -> A : Call tool/agent
+    A --> F : Return result
+end
+
+F --> AC : Return final response
+AC --> U : Return response to user
+
+' Add notes
+note over FS
+  The Framework Selector analyzes the query and selects
+  the most appropriate framework:
+  - Route Framework for simple, categorizable queries
+  - React Framework for multi-step reasoning problems
+  - Plan Framework for complex planning problems
+  - Direct LLM for simple informational queries
+end note
+
+note over T
+  The Toolkit provides a unified interface to:
+  - Local tools (Python functions)
+  - MCP tools (external services)
+  - Agent tools (specialized agents wrapped as tools)
+end note
+
+note over F
+  The selected framework could be:
+  - Route Framework: Routes to specialized agents
+  - React Framework: Uses ReAct paradigm with tools
+  - Plan Framework: Creates and executes a plan
+  - Direct LLM: Generates a response directly
+end note
+
+@enduml

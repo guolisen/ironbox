@@ -47,7 +47,7 @@ class AgentCore:
         self.framework_registry = FrameworkRegistry(config=self.config)
         
         # Create framework selector
-        self.framework_selector = FrameworkSelector(llm=self.llm, config=self.config)
+        self.framework_selector = FrameworkSelector(llm=self.llm, config=self.config, toolkit=self.toolkit)
     
     def register_framework(self, framework_type: str, framework: BaseLCAgentFramework):
         """
@@ -246,43 +246,83 @@ class AgentCore:
             # Register MCP tools
             await self.register_mcp_tools()
             
-            # Register framework selector with the orchestrator
+            # First, register the framework selector with the orchestrator
+            # This is the entry point for the graph
             self.framework_registry.orchestrator.register_framework(
                 "framework_selector", 
                 self.framework_selector
             )
             
-            # Load frameworks from configuration
-            self.framework_registry.load_from_config(self.toolkit, self.llm)
-            
             # For backward compatibility, register the LangChain frameworks with the old framework system
+            # but avoid double registration in the orchestrator
             from ironbox.core.langchain_frameworks import (
                 LCRouteAgentFramework,
                 LCReactAgentFramework,
                 LCPlanAgentFramework
             )
             
-            # Create and register LangChain frameworks
-            lc_route_framework = LCRouteAgentFramework(
-                llm=self.llm,
-                agents=self.toolkit.agents,
-                config=self.config.get("agent_frameworks", [])[0].get("config", {})
-            )
-            self.register_framework("route", lc_route_framework)
+            # Create LangChain frameworks but don't register them with the orchestrator yet
+            frameworks_config = self.config.get("agent_frameworks", [])
             
-            lc_react_framework = LCReactAgentFramework(
-                llm=self.llm,
-                tools=self.toolkit.tools,
-                config=self.config.get("agent_frameworks", [])[1].get("config", {})
-            )
-            self.register_framework("react", lc_react_framework)
+            # Log the current state of frameworks
+            logger.debug("Current frameworks in registry: %s", list(self.framework_registry.frameworks.keys()))
+            logger.debug("Current frameworks in orchestrator: %s", list(self.framework_registry.orchestrator.frameworks.keys()))
             
-            lc_plan_framework = LCPlanAgentFramework(
-                llm=self.llm,
-                tools=self.toolkit.tools,
-                config=self.config.get("agent_frameworks", [])[2].get("config", {})
-            )
-            self.register_framework("plan", lc_plan_framework)
+            # Only register these frameworks if they're not already loaded from config
+            if not self.framework_registry.frameworks:
+                logger.debug("No frameworks in registry, creating standard frameworks")
+                
+                # Create and register standard frameworks with consistent names
+                # The key is to use consistent names that match what the framework_selector returns
+                
+                # Create and register route framework
+                if len(frameworks_config) > 0:
+                    lc_route_framework = LCRouteAgentFramework(
+                        llm=self.llm,
+                        agents=self.toolkit.agents,
+                        config=frameworks_config[0].get("config", {})
+                    )
+                    # Use "route" as the framework name to match what framework_selector returns
+                    self.framework_registry.frameworks["route"] = lc_route_framework
+                    self.framework_registry.orchestrator.register_framework("route", lc_route_framework)
+                    logger.debug("Registered route framework")
+                
+                # Create and register react framework
+                if len(frameworks_config) > 1:
+                    lc_react_framework = LCReactAgentFramework(
+                        llm=self.llm,
+                        tools=self.toolkit.tools,
+                        config=frameworks_config[1].get("config", {})
+                    )
+                    # Use "react" as the framework name to match what framework_selector returns
+                    self.framework_registry.frameworks["react"] = lc_react_framework
+                    self.framework_registry.orchestrator.register_framework("react", lc_react_framework)
+                    logger.debug("Registered react framework")
+                
+                # Create and register plan framework
+                if len(frameworks_config) > 2:
+                    lc_plan_framework = LCPlanAgentFramework(
+                        llm=self.llm,
+                        tools=self.toolkit.tools,
+                        config=frameworks_config[2].get("config", {})
+                    )
+                    # Use "plan" as the framework name to match what framework_selector returns
+                    self.framework_registry.frameworks["plan"] = lc_plan_framework
+                    self.framework_registry.orchestrator.register_framework("plan", lc_plan_framework)
+                    logger.debug("Registered plan framework")
+                
+                # Log the updated state of frameworks
+                logger.debug("Updated frameworks in registry: %s", list(self.framework_registry.frameworks.keys()))
+                logger.debug("Updated frameworks in orchestrator: %s", list(self.framework_registry.orchestrator.frameworks.keys()))
+            
+            # Now build the orchestrator graph with all the frameworks
+            try:
+                self.framework_registry.orchestrator.build_graph()
+                logger.debug("Built orchestrator graph with frameworks: %s", 
+                            list(self.framework_registry.orchestrator.frameworks.keys()))
+            except Exception as e:
+                logger.error(f"Error building graph: {e}")
+                raise
             
             logger.debug("Agent core initialized successfully")
         except Exception as e:

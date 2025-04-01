@@ -1,0 +1,68 @@
+@startuml Toolkit Structure
+
+' Define components
+package "Toolkit" as TK {
+  component "Local Tools" as LT
+  component "MCP Tools" as MT
+  component "Agent Tools" as AT
+  component "Configuration" as CF
+  component "Auto-Discovery" as AD
+}
+
+component "Agent Core" as AC
+component "React Framework" as RF
+component "Plan Framework" as PF
+component "Route Framework" as RoF
+component "MCP Client" as MC
+component "MCP Servers" as MS
+component "Specialized Agents" as SA
+
+' Define relationships
+AC --> TK : Manages
+TK --> LT : Contains
+TK --> MT : Contains
+TK --> AT : Contains
+TK ..> CF : Loads from
+TK ..> AD : Uses
+
+RF --> TK : Uses tools
+PF --> TK : Uses tools
+RoF --> TK : Can also use
+RoF --> SA : Uses directly
+
+MT --> MC : Calls
+MC --> MS : Invokes
+AT --> SA : Wraps
+
+' Add notes
+note right of LT
+  Local tools are defined as Python functions
+  within the application and registered
+  with the unified toolkit
+end note
+
+note right of MT
+  MCP tools are provided by external MCP servers
+  and accessed through the MCP client with
+  wrapper functions
+end note
+
+note right of AT
+  Agent tools are specialized agents wrapped
+  as tools, allowing React and Plan frameworks
+  to use agents as tools
+end note
+
+note right of CF
+  Tools and agents can be configured through
+  YAML configuration files, allowing for
+  flexible and dynamic setup
+end note
+
+note right of AD
+  Auto-discovery mechanism can find and register
+  tools and agents automatically based on
+  conventions and patterns
+end note
+
+@enduml

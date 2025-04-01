@@ -1,0 +1,48 @@
+@startuml Framework Selection Diagram
+
+' Define components
+component "User Query" as Query
+component "Framework Selector" as FS
+component "Route Framework" as RF
+component "React Framework" as ReF
+component "Plan Framework" as PF
+component "Direct LLM" as DL
+
+' Define relationships
+Query --> FS
+FS --> RF : Simple categorizable query
+FS --> ReF : Multi-step reasoning problem
+FS --> PF : Complex planning problem
+FS --> DL : Simple informational query
+
+' Add notes
+note right of FS
+  The Framework Selector analyzes the query and determines
+  which framework is most appropriate based on:
+  - Query complexity
+  - Need for specialized agent knowledge
+  - Need for multi-step reasoning
+  - Need for planning
+end note
+
+note right of RF
+  For simple, categorizable queries matching
+  a specific agent's expertise
+end note
+
+note right of ReF
+  For multi-step problems requiring
+  reasoning and tool usage
+end note
+
+note right of PF
+  For complex problems requiring
+  structured planning
+end note
+
+note right of DL
+  For simple informational queries
+  not requiring tools
+end note
+
+@enduml

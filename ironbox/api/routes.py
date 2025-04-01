@@ -92,34 +92,7 @@ class HealthCheckResponse(BaseModel):
 
 
 # Initialize agent core
-async def initialize_agent_core():
-    """Initialize agent core with agents and tools."""
-    # Register agents
-    default_agent_core.register_agent(AgentType.CLUSTER_REGISTER, create_cluster_register_agent)
-    default_agent_core.register_agent(AgentType.CLUSTER_INFO, create_cluster_info_agent)
-    default_agent_core.register_agent(AgentType.CLUSTER_HEALTH, create_cluster_health_agent)
-    default_agent_core.register_agent(AgentType.MEMORY, create_memory_agent)
-    default_agent_core.register_agent(AgentType.MCP, create_mcp_agent)
-    default_agent_core.register_agent(AgentType.LLM, create_llm_agent)
-    
-    # Register local tools for React and Plan frameworks
-    default_agent_core.register_local_tools = register_local_tools
-    
-    # Initialize all tools (local and MCP) and set up frameworks
-    await initialize_default_agent_core()
-    
-    logger.debug("Initialized agent core with frameworks: %s", list(default_agent_core.frameworks.keys()))
-
-# Register local tools
-def register_local_tools(self):
-    """Register local tools with the agent core."""
-    # Kubernetes tools
-    self.register_tool("get_pod_count", get_pod_count)
-    self.register_tool("get_node_status", get_node_status)
-    self.register_tool("restart_pod", restart_pod)
-    self.register_tool("scale_deployment", scale_deployment)
-    
-    logger.debug("Registered local Kubernetes tools")
+# This function is called from the server's lifespan context manager
 
 # Sample local tools implementation
 async def get_pod_count(cluster_name: str) -> str:
@@ -156,6 +129,37 @@ async def scale_deployment(cluster_name: str, deployment_name: str, replicas: in
 
 # Initialize agent core on startup
 # This will be called from the API server's lifespan context manager
+async def initialize_agent_core():
+    """Initialize agent core with agents and tools."""
+    try:
+        logger.info("Initializing agent core from routes...")
+        
+        # Register agents
+        default_agent_core.register_agent(AgentType.CLUSTER_REGISTER, create_cluster_register_agent)
+        default_agent_core.register_agent(AgentType.CLUSTER_INFO, create_cluster_info_agent)
+        default_agent_core.register_agent(AgentType.CLUSTER_HEALTH, create_cluster_health_agent)
+        default_agent_core.register_agent(AgentType.MEMORY, create_memory_agent)
+        default_agent_core.register_agent(AgentType.MCP, create_mcp_agent)
+        default_agent_core.register_agent(AgentType.LLM, create_llm_agent)
+        
+        # Register local tools
+        default_agent_core.register_tool("get_pod_count", get_pod_count)
+        default_agent_core.register_tool("get_node_status", get_node_status)
+        default_agent_core.register_tool("restart_pod", restart_pod)
+        default_agent_core.register_tool("scale_deployment", scale_deployment)
+        
+        # Initialize the agent core with all registered agents and tools
+        await initialize_default_agent_core()
+        
+        # Log the frameworks that are registered
+        logger.info("Agent core initialized with frameworks: %s", 
+                   list(default_agent_core.framework_registry.frameworks.keys()))
+        logger.info("Agent core initialized with orchestrator frameworks: %s", 
+                   list(default_agent_core.framework_registry.orchestrator.frameworks.keys()))
+    except Exception as e:
+        logger.error(f"Error initializing agent core from routes: {e}")
+        logger.error(traceback.format_exc())
+        raise
 
 # Chat endpoints
 @router.post("/chat", response_model=ChatResponse)

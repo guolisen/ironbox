@@ -3,6 +3,7 @@ API server for IronBox.
 """
 import logging
 import asyncio
+import traceback
 from typing import Dict, Any, List, Optional, Tuple, Union
 from contextlib import asynccontextmanager
 
@@ -27,12 +28,33 @@ from ironbox.agents.llm_agent import LLMAgent
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Import the agent core initialization function
+from ironbox.api.routes import initialize_agent_core as routes_initialize_agent_core
+from ironbox.core.agent_core import default_agent_core, initialize_default_agent_core
+
 # Define the initialize_agent_core function here
 async def initialize_agent_core():
     """Initialize agent core with agents and tools."""
-    logger.debug("Agent core initialization placeholder")
-    # This is a placeholder for the actual initialization
-    # The real implementation will be added once the agent_core module is ready
+    logger.info("Initializing agent core...")
+    
+    # Register agents
+    default_agent_core.register_agent(AgentType.CLUSTER_REGISTER, create_cluster_register_agent)
+    default_agent_core.register_agent(AgentType.CLUSTER_INFO, create_cluster_info_agent)
+    default_agent_core.register_agent(AgentType.CLUSTER_HEALTH, create_cluster_health_agent)
+    default_agent_core.register_agent(AgentType.MEMORY, create_memory_agent)
+    default_agent_core.register_agent(AgentType.MCP, create_mcp_agent)
+    default_agent_core.register_agent(AgentType.LLM, create_llm_agent)
+    
+    # Register local tools
+    default_agent_core.register_tool("get_pod_count", get_pod_count)
+    default_agent_core.register_tool("get_node_status", get_node_status)
+    default_agent_core.register_tool("restart_pod", restart_pod)
+    default_agent_core.register_tool("scale_deployment", scale_deployment)
+    
+    # Initialize the agent core with all registered agents and tools
+    await initialize_default_agent_core()
+    
+    logger.info("Agent core initialized successfully")
 
 # Helper functions for agent creation (placeholders)
 def create_cluster_register_agent(db_session=None):
@@ -99,20 +121,26 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for FastAPI app.
     Handles startup and shutdown events.
     """
-    # Startup: Initialize database and MCP client
-    await init_db()
-    await default_mcp_client.initialize()
-    
-    # Initialize agent core (placeholder for now)
-    logger.info("Initializing agent core...")
-    await initialize_agent_core()
-    logger.info("Agent core initialized")
-    
-    # Yield control to FastAPI
-    yield
-    
-    # Shutdown: Clean up resources if needed
-    # No cleanup needed for now
+    try:
+        # Startup: Initialize database and MCP client
+        await init_db()
+        await default_mcp_client.initialize()
+        
+        # Initialize agent core
+        logger.info("Initializing agent core from server lifespan...")
+        # Call the initialize_agent_core function from routes.py
+        await routes_initialize_agent_core()
+        logger.info("Agent core initialized successfully")
+        
+        # Yield control to FastAPI
+        yield
+        
+        # Shutdown: Clean up resources if needed
+        # No cleanup needed for now
+    except Exception as e:
+        logger.error(f"Error in lifespan context manager: {e}")
+        logger.error(traceback.format_exc())
+        raise
 
 # Create FastAPI app with lifespan
 app = FastAPI(

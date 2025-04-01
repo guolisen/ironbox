@@ -1,0 +1,36 @@
+@startuml React Framework Flow
+
+' Define participants
+participant "Framework Selector" as FS
+participant "React Framework" as ReF
+participant "React Agent" as RA
+participant "Tools" as T
+
+' Define sequence
+FS -> ReF : Select react framework
+ReF -> RA : Process query
+
+loop Until solution found
+    RA -> RA : Generate thought
+    RA -> RA : Decide action
+    RA -> T : Execute tool
+    T --> RA : Return observation
+end
+
+RA --> ReF : Return final answer
+ReF --> FS : Return final response
+
+' Add notes
+note over RA
+  The React Agent follows the ReAct paradigm:
+  Reason + Act iteratively until a solution is found
+end note
+
+note over T
+  Tools can be:
+  - Local tools (e.g., get_pod_count)
+  - MCP tools (e.g., weather_get_current)
+  - Agent tools (e.g., agent_cluster_health)
+end note
+
+@enduml

@@ -1,0 +1,60 @@
+@startuml Tool Invocation Sequence
+
+' Define participants
+participant "Framework" as F
+participant "Toolkit" as T
+participant "Tool Function" as TF
+participant "Agent Wrapper" as AW
+participant "Specialized Agent" as A
+participant "MCP Client" as MC
+participant "MCP Server" as MS
+
+' Local tool invocation
+F -> T : Look up tool "get_pod_count"
+T --> F : Return function reference
+F -> TF : Call with arguments
+TF -> TF : Execute implementation
+TF --> F : Return result
+
+' Add separator
+== Agent Tool Invocation ==
+
+' Agent tool invocation
+F -> T : Look up tool "agent_cluster_health"
+T --> F : Return agent wrapper function
+F -> AW : Call with arguments
+AW -> A : Create minimal state and call
+A -> A : Process state
+A --> AW : Return updated state
+AW --> F : Extract and return response
+
+' Add separator
+== MCP Tool Invocation ==
+
+' MCP tool invocation
+F -> T : Look up tool "mcp_weather_get_current_weather"
+T --> F : Return wrapper function
+F -> MC : Call wrapper with arguments
+MC -> MS : Send JSON-RPC request
+MS -> MS : Process request
+MS --> MC : Return JSON-RPC response
+MC --> F : Return parsed result
+
+' Add notes
+note over TF
+  Local tools execute directly within the application
+end note
+
+note over AW
+  Agent wrappers convert agent calls to tool interface:
+  1. Create minimal state
+  2. Call agent with state
+  3. Extract response from state
+end note
+
+note over MC
+  MCP tools connect to external services
+  via the Model Context Protocol
+end note
+
+@enduml

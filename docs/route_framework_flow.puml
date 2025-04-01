@@ -1,0 +1,35 @@
+@startuml Route Framework Flow
+
+' Define participants
+participant "Framework Selector" as FS
+participant "Route Framework" as RF
+participant "Router Agent" as RA
+participant "Specialized Agent" as SA
+
+' Define sequence
+FS -> RF : Select route framework
+RF -> RA : Process query
+RA -> RA : Analyze query
+RA -> SA : Route to appropriate agent
+SA -> SA : Process query
+SA --> RF : Return response
+RF --> FS : Return final response
+
+' Add notes
+note over RA
+  The Router Agent analyzes the query and determines
+  which specialized agent should handle it based on
+  the query content and agent capabilities
+end note
+
+note over SA
+  Specialized agents include:
+  - Cluster Register Agent
+  - Cluster Info Agent
+  - Cluster Health Agent
+  - Memory Agent
+  - MCP Agent
+  - LLM Agent
+end note
+
+@enduml
