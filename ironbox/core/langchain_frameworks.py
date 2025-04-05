@@ -180,7 +180,13 @@ class LCRouteAgentFramework(BaseLCAgentFramework):
             # If we have a next agent and it's in our agents dictionary, call it
             if next_agent and next_agent in self.agents:
                 agent = self.agents[next_agent]
-                state = await agent(state)
+                # Check if the agent is callable (has __call__ method)
+                if hasattr(agent, '__call__'):
+                    # Call the agent's __call__ method directly
+                    state = await agent.__call__(state)
+                else:
+                    # Fallback to direct awaiting if it's an awaitable
+                    state = await agent(state)
             
             return state
         except Exception as e:

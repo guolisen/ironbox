@@ -24,7 +24,7 @@ DB_DIR.mkdir(exist_ok=True)
 DEFAULT_CONFIG = {
     "llm": {
         "provider": "ollama",
-        "base_url": os.getenv("OLLAMA_BASE_URL", "http://192.168.0.104:11434"),
+        "base_url": "http://192.168.0.101:11434", #os.getenv("OLLAMA_BASE_URL", "http://192.168.0.104:11434"),
         "model": os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
         "temperature": 0.7,
         "max_tokens": 2000,
